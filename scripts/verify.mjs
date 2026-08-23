@@ -1000,6 +1000,97 @@ await asyncTest("derived deltas agree with reported ones to within a zatoshi", a
  * else in this app matters.
  */
 
+/* ── the fetch gate behind every panel ───────────────────────────────────── */
+
+/**
+ * The bug these cover made the RPC console look completely dead in `npm run dev`,
+ * while every other panel worked.
+ *
+ * `useEnvelope` had two guards that were each correct alone. One skipped a fetch
+ * when another was already in flight, so a slow node plus a 10s interval could not
+ * stack requests. The other discarded a response whose generation was no longer
+ * current, so a stale url's reply could not overwrite a newer one.
+ *
+ * React StrictMode mounts, runs effects, unmounts and remounts immediately. That
+ * drove the pair into a deadlock: run 1 starts a fetch; run 2 bumps the generation
+ * and is then refused by the in-flight guard, so it never fetches; run 1's reply
+ * arrives, is discarded as stale, and — because the `finally` was gated on the same
+ * staleness check — never cleared `loading`. Nothing was left to retrigger it.
+ *
+ * Panels that poll recovered on their first interval tick. The two that pass
+ * intervalMs = 0 did not, which is exactly /rpc and the capability table on /node.
+ *
+ * The fix is that the in-flight slot holds a generation rather than a boolean, so
+ * coalescing still applies within a generation but never blocks a newer one.
+ */
+
+section("useEnvelope fetch gate");
+
+const { createLoadGate } = await import("../components/useEnvelope.ts");
+
+test("THE REGRESSION TEST: a StrictMode double mount still resolves", () => {
+  const gate = createLoadGate();
+
+  // Effect run 1: mount.
+  gate.nextGeneration();
+  const first = gate.begin();
+  assert.equal(first, 1, "the first mount must be allowed to fetch");
+
+  // Effect run 2: StrictMode remount, while run 1's fetch is still in the air.
+  gate.nextGeneration();
+  const second = gate.begin();
+  assert.ok(second !== null, "a remount must never be blocked by the previous fetch");
+  assert.equal(second, 2);
+
+  // Run 1's reply lands late and must be discarded without clearing loading.
+  assert.equal(gate.isCurrent(first), false, "generation 1 is stale");
+  assert.equal(gate.end(first), false, "a stale reply must not clear loading");
+
+  // Run 2's reply lands and IS applied. This is the assertion that was false
+  // before the fix: nothing ever reached this state, so loading stayed true.
+  assert.equal(gate.isCurrent(second), true);
+  assert.equal(gate.end(second), true, "the live generation must clear loading");
+});
+
+test("repeated interval ticks against a slow node do not stack", () => {
+  // The invariant the in-flight guard exists for, and which the fix preserves:
+  // within one generation, only one request at a time.
+  const gate = createLoadGate();
+  gate.nextGeneration();
+  const tick = gate.begin();
+  assert.equal(tick, 1);
+  assert.equal(gate.begin(), null, "a second tick must be coalesced away");
+  assert.equal(gate.begin(), null, "and a third");
+  gate.end(tick);
+  assert.equal(gate.begin(), 1, "once the slot frees, the next tick proceeds");
+});
+
+test("a url change supersedes an in-flight request for the old url", () => {
+  const gate = createLoadGate();
+  gate.nextGeneration();
+  const old = gate.begin();
+  gate.nextGeneration();
+  const fresh = gate.begin();
+  assert.ok(fresh !== null && fresh !== old);
+  // The old url's reply must not overwrite the new url's data.
+  assert.equal(gate.isCurrent(old), false);
+  assert.equal(gate.isCurrent(fresh), true);
+});
+
+test("a late reply cannot release a slot a newer generation owns", () => {
+  // If the old generation cleared the slot on its way out, the new generation's
+  // in-flight request would stop being tracked and the next tick would stack on it.
+  const gate = createLoadGate();
+  gate.nextGeneration();
+  const old = gate.begin();
+  gate.nextGeneration();
+  const fresh = gate.begin();
+  gate.end(old);
+  assert.equal(gate.begin(), null, "the newer generation still holds the slot");
+  gate.end(fresh);
+  assert.ok(gate.begin() !== null, "and releases it when it finishes");
+});
+
 section("console allowlist — the security boundary");
 
 const {
@@ -1895,6 +1986,7 @@ await asyncTest("the endpoint description names the auth style without leaking t
   const base = {
     mode: "live",
     url: "https://node.example.com/AbCdEfSecretToken123",
+    headers: {},
     timeoutMs: 1,
     jsonrpcVersion: "2.0",
   };
@@ -1902,12 +1994,159 @@ await asyncTest("the endpoint description names the auth style without leaking t
     [{ user: "", password: "", cookieFile: "" }, "node.example.com (token in URL)"],
     [{ user: "", password: "", cookieFile: "/var/cache/zebra/.cookie" }, "node.example.com (cookie auth)"],
     [{ user: "alice", password: "hunter2", cookieFile: "" }, "node.example.com (basic auth)"],
+    [
+      { user: "", password: "", cookieFile: "", headers: { "x-api-key": "AbCdEfSecretToken123" } },
+      "node.example.com (header auth (x-api-key))",
+    ],
+    [
+      {
+        user: "alice",
+        password: "hunter2",
+        cookieFile: "",
+        headers: { "x-tenant": "acme" },
+      },
+      "node.example.com (basic auth + header auth (x-tenant))",
+    ],
   ];
   for (const [auth, expected] of cases) {
     const rendered = describeEndpoint({ ...base, ...auth });
     assert.equal(rendered, expected);
     assert.doesNotMatch(rendered, /AbCdEfSecretToken123/, "the URL path is where the token lives");
     assert.doesNotMatch(rendered, /hunter2|\.cookie/, "credentials are not part of a description");
+  }
+});
+
+/* ── provider API keys ───────────────────────────────────────────────────── */
+
+/**
+ * There is no anonymous public Zcash JSON-RPC endpoint, so reaching live data means
+ * either your own zebrad or a provider account — and the providers put the key in a
+ * custom header (`api-key` on NOWNodes, `x-api-key` on Tatum). Without
+ * ZCASH_RPC_HEADERS those endpoints are unreachable, which is what these cover.
+ */
+
+section("provider API keys");
+
+async function captureHeaderRequest(headerSpec, extraEnv = {}) {
+  const previous = {
+    mode: process.env.ZCASH_RPC_MODE,
+    url: process.env.ZCASH_RPC_URL,
+    headers: process.env.ZCASH_RPC_HEADERS,
+    fetch: globalThis.fetch,
+    extras: Object.fromEntries(Object.keys(extraEnv).map((key) => [key, process.env[key]])),
+  };
+  process.env.ZCASH_RPC_MODE = "live";
+  process.env.ZCASH_RPC_URL = "https://zec.example.invalid/";
+  process.env.ZCASH_RPC_HEADERS = headerSpec;
+  for (const [key, value] of Object.entries(extraEnv)) process.env[key] = value;
+
+  const seen = [];
+  globalThis.fetch = async (url, init) => {
+    seen.push({ url, headers: init?.headers ?? {} });
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: "1", result: 7 }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const { rpcCall } = await import("../lib/rpc/client.ts");
+    return { seen, result: await rpcCall("getblockcount"), error: null };
+  } catch (err) {
+    return { seen, result: null, error: err };
+  } finally {
+    globalThis.fetch = previous.fetch;
+    for (const [key, value] of Object.entries({ ...previous.extras })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    if (previous.mode === undefined) delete process.env.ZCASH_RPC_MODE;
+    else process.env.ZCASH_RPC_MODE = previous.mode;
+    if (previous.url === undefined) delete process.env.ZCASH_RPC_URL;
+    else process.env.ZCASH_RPC_URL = previous.url;
+    if (previous.headers === undefined) delete process.env.ZCASH_RPC_HEADERS;
+    else process.env.ZCASH_RPC_HEADERS = previous.headers;
+  }
+}
+
+await asyncTest("a provider API key reaches the wire in the shape NOWNodes wants", async () => {
+  const { seen, result, error } = await captureHeaderRequest("api-key: nn_live_abc123");
+  assert.equal(error, null, `unexpected failure: ${error?.message}`);
+  assert.equal(result, 7);
+  assert.equal(seen[0].headers["api-key"], "nn_live_abc123");
+  // No credentials configured any other way, so nothing else should be attached.
+  assert.equal(seen[0].headers.Authorization, undefined);
+  assert.equal(seen[0].headers["Content-Type"], "application/json");
+});
+
+await asyncTest("the JSON form parses identically to the pair form", async () => {
+  const pair = await captureHeaderRequest("x-api-key: t-abc-123");
+  const json = await captureHeaderRequest('{"x-api-key":"t-abc-123"}');
+  assert.equal(pair.error, null);
+  assert.equal(json.error, null);
+  assert.equal(pair.seen[0].headers["x-api-key"], "t-abc-123");
+  assert.deepEqual(json.seen[0].headers, pair.seen[0].headers);
+});
+
+await asyncTest("several headers can be set at once, and a value may contain a colon", async () => {
+  // Split on the FIRST colon only. A Bearer token or a URL in a header value would
+  // otherwise be truncated at its own colon.
+  const { seen, error } = await captureHeaderRequest(
+    "Authorization: Bearer abc:123, x-tenant: acme",
+  );
+  assert.equal(error, null, `unexpected failure: ${error?.message}`);
+  assert.equal(seen[0].headers.Authorization, "Bearer abc:123");
+  assert.equal(seen[0].headers["x-tenant"], "acme");
+});
+
+await asyncTest("a custom header overrides the basic auth ZPulse would have built", async () => {
+  // The escape hatch: a provider wanting a Bearer token must be able to say so even
+  // though USER/PASSWORD are set, otherwise the two would fight and Basic would win.
+  const { seen, error } = await captureHeaderRequest("Authorization: Bearer override-me", {
+    ZCASH_RPC_USER: "alice",
+    ZCASH_RPC_PASSWORD: "hunter2",
+  });
+  assert.equal(error, null, `unexpected failure: ${error?.message}`);
+  assert.equal(seen[0].headers.Authorization, "Bearer override-me");
+});
+
+await asyncTest("a malformed header spec fails loudly instead of sending no key", async () => {
+  // The failure this prevents: a typo silently drops the API key, the provider
+  // answers 401, and the fault looks like it is at the far end.
+  const { RpcConfigError } = await import("../lib/rpc/errors.ts");
+  const missingColon = await captureHeaderRequest("x-api-key abc123");
+  assert.ok(missingColon.error instanceof RpcConfigError, "expected a config error");
+  assert.match(missingColon.error.message, /ZCASH_RPC_HEADERS/);
+  assert.equal(missingColon.seen.length, 0, "nothing should have been sent");
+
+  const badJson = await captureHeaderRequest('{"x-api-key": }');
+  assert.ok(badJson.error instanceof RpcConfigError, "expected a config error");
+  assert.equal(badJson.seen.length, 0);
+});
+
+await asyncTest("the endpoint description names the header but never its value", async () => {
+  const previous = process.env.ZCASH_RPC_HEADERS;
+  const previousUrl = process.env.ZCASH_RPC_URL;
+  const previousMode = process.env.ZCASH_RPC_MODE;
+  process.env.ZCASH_RPC_MODE = "live";
+  process.env.ZCASH_RPC_URL = "https://zec.nownodes.io/";
+  process.env.ZCASH_RPC_HEADERS = "api-key: nn_secret_value";
+  try {
+    const { describeEndpoint, readRpcConfig } = await import("../lib/rpc/client.ts");
+    const description = describeEndpoint(readRpcConfig());
+    assert.match(description, /zec\.nownodes\.io/);
+    assert.match(description, /header auth \(api-key\)/);
+    assert.ok(
+      !description.includes("nn_secret_value"),
+      `the key leaked into the UI string: ${description}`,
+    );
+  } finally {
+    if (previous === undefined) delete process.env.ZCASH_RPC_HEADERS;
+    else process.env.ZCASH_RPC_HEADERS = previous;
+    if (previousUrl === undefined) delete process.env.ZCASH_RPC_URL;
+    else process.env.ZCASH_RPC_URL = previousUrl;
+    if (previousMode === undefined) delete process.env.ZCASH_RPC_MODE;
+    else process.env.ZCASH_RPC_MODE = previousMode;
   }
 });
 

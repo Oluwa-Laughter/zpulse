@@ -11,7 +11,9 @@
  *     held-over data for current data.
  *
  *  2. **Do not stack requests.** A slow node plus a 10s interval means overlapping
- *     fetches forever. An in-flight guard skips the tick instead.
+ *     fetches forever. An in-flight guard skips the tick instead — but only within
+ *     one generation. Blocking a *new* generation on the previous one's in-flight
+ *     request is what used to wedge the non-polling panels; see `inFlight` below.
  *
  *  3. **Stop when the tab is hidden.** A dashboard left open in a background tab
  *     would otherwise burn the RPC quota all night for nobody. Polling resumes,
@@ -26,6 +28,59 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Meta } from "@/lib/data";
 
 export type ApiError = { kind: string; message: string };
+
+/**
+ * The request-coordination state machine, extracted so it can be tested.
+ *
+ * It is two facts — which generation of this hook is current, and which
+ * generation owns the in-flight request — and the whole RPC-console outage lived
+ * in how they interacted. React's own semantics are not involved, so this is
+ * exercised directly in scripts/verify.mjs against the exact StrictMode mount
+ * sequence rather than being reasoned about.
+ *
+ * A "generation" is one mount, or one url. It increments on remount and on a url
+ * change, and a result from an older generation is discarded.
+ */
+export type LoadGate = {
+  /** Bump on mount and on a url change. Returns the new generation. */
+  nextGeneration: () => number;
+  /**
+   * Claim the right to fetch. Returns the claiming generation, or null when a
+   * request from *this same* generation is already in the air — which is the
+   * coalescing that stops a slow node plus a 10s interval from stacking requests.
+   *
+   * Crucially it does not refuse a *newer* generation. Refusing one deadlocks:
+   * the new generation never fetches, the old generation's result is discarded as
+   * stale, and nothing is left to clear `loading`.
+   */
+  begin: () => number | null;
+  /** Whether `mine`'s result is still worth applying. */
+  isCurrent: (mine: number) => boolean;
+  /** Release the slot if still ours. Returns whether `mine` is still current. */
+  end: (mine: number) => boolean;
+};
+
+export function createLoadGate(): LoadGate {
+  let generation = 0;
+  let inFlight: number | null = null;
+
+  return {
+    nextGeneration: () => (generation += 1),
+    begin: () => {
+      const mine = generation;
+      if (inFlight === mine) return null;
+      inFlight = mine;
+      return mine;
+    },
+    isCurrent: (mine) => mine === generation,
+    end: (mine) => {
+      // Only release if still ours — a newer generation may have claimed the slot
+      // while this request was in the air.
+      if (inFlight === mine) inFlight = null;
+      return mine === generation;
+    },
+  };
+}
 
 export type Live<T> = {
   data: T | null;
@@ -46,21 +101,23 @@ export function useEnvelope<T>(url: string, intervalMs = 0): Live<T> {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const inFlight = useRef(false);
-  // Guards against a response landing after the component unmounted, and against
-  // a stale response from a previous url overwriting a newer one.
-  const generation = useRef(0);
+  /**
+   * See createLoadGate. Lazily constructed so a re-render does not allocate a
+   * throwaway, and held in a ref so it survives every render of this mount.
+   */
+  const gateRef = useRef<LoadGate | null>(null);
+  if (gateRef.current === null) gateRef.current = createLoadGate();
+  const gate = gateRef.current;
 
   const load = useCallback(async () => {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    const mine = generation.current;
+    const mine = gate.begin();
+    if (mine === null) return;
     setRefreshing(true);
 
     try {
       const response = await fetch(url, { cache: "no-store" });
       const body = (await response.json()) as Body<T>;
-      if (mine !== generation.current) return;
+      if (!gate.isCurrent(mine)) return;
 
       setMeta(body.meta ?? null);
       if (body.error) {
@@ -72,22 +129,21 @@ export function useEnvelope<T>(url: string, intervalMs = 0): Live<T> {
         setData(body.data ?? null);
       }
     } catch (err) {
-      if (mine !== generation.current) return;
+      if (!gate.isCurrent(mine)) return;
       setError({
         kind: "NetworkError",
         message: err instanceof Error ? err.message : "The request to ZPulse itself failed.",
       });
     } finally {
-      if (mine === generation.current) {
+      if (gate.end(mine)) {
         setLoading(false);
         setRefreshing(false);
       }
-      inFlight.current = false;
     }
-  }, [url]);
+  }, [url, gate]);
 
   useEffect(() => {
-    generation.current += 1;
+    gate.nextGeneration();
     setLoading(true);
     void load();
 

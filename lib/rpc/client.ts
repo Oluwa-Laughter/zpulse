@@ -45,6 +45,18 @@ export type RpcConfig = {
    * app at a local node fails. Ignored when user/password are set.
    */
   cookieFile: string;
+  /**
+   * Extra request headers, from `ZCASH_RPC_HEADERS`.
+   *
+   * This is the shape most hosted Zcash providers actually want: not basic auth
+   * and not a token in the path, but a single custom header — `api-key` on
+   * NOWNodes, `x-api-key` on Tatum. Without this there is no way to reach either,
+   * and they are the two most accessible free tiers.
+   *
+   * Applied last, so a provider wanting `Authorization: Bearer <token>` can say so
+   * here and override the basic-auth header this module would otherwise build.
+   */
+  headers: Record<string, string>;
   timeoutMs: number;
   /**
    * zcashd (and Bitcoin-Core-derived nodes) ignore this field's value, while
@@ -117,6 +129,63 @@ function readCookieAuth(path: string, method: string): string {
 }
 
 /**
+ * Parse `ZCASH_RPC_HEADERS`.
+ *
+ * Two forms, because both are things a person will reasonably type:
+ *
+ *   ZCASH_RPC_HEADERS={"x-api-key":"abc123"}
+ *   ZCASH_RPC_HEADERS=x-api-key: abc123
+ *
+ * The second form splits on newlines and commas, then on the first colon only —
+ * so a value containing a colon survives.
+ *
+ * A malformed value throws rather than being silently dropped. Quietly sending no
+ * API key produces an HTTP 401 from the provider, and debugging that from the
+ * far end is miserable when the actual fault is a typo in .env.local.
+ */
+function parseExtraHeaders(raw: string): Record<string, string> {
+  if (!raw) return {};
+
+  if (raw.startsWith("{")) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new RpcConfigError(
+        'ZCASH_RPC_HEADERS starts with "{" but is not valid JSON. Expected {"header-name":"value"}.',
+        "config",
+      );
+    }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new RpcConfigError("ZCASH_RPC_HEADERS must be a JSON object of header names to values.", "config");
+    }
+    const headers: Record<string, string> = {};
+    for (const [name, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value !== "string") {
+        throw new RpcConfigError(`ZCASH_RPC_HEADERS: the value for "${name}" must be a string.`, "config");
+      }
+      headers[name.trim()] = value;
+    }
+    return headers;
+  }
+
+  const headers: Record<string, string> = {};
+  for (const pair of raw.split(/[\n,]/)) {
+    const trimmed = pair.trim();
+    if (!trimmed) continue;
+    const colon = trimmed.indexOf(":");
+    if (colon <= 0) {
+      throw new RpcConfigError(
+        `ZCASH_RPC_HEADERS: "${trimmed}" is not a "Header-Name: value" pair. Use that form, or a JSON object.`,
+        "config",
+      );
+    }
+    headers[trimmed.slice(0, colon).trim()] = trimmed.slice(colon + 1).trim();
+  }
+  return headers;
+}
+
+/**
  * Read configuration fresh on each call rather than caching at module load, so
  * editing .env.local during `next dev` takes effect without a restart.
  *
@@ -140,6 +209,7 @@ export function readRpcConfig(): RpcConfig {
     user: envStr("ZCASH_RPC_USER"),
     password: envStr("ZCASH_RPC_PASSWORD"),
     cookieFile: envStr("ZCASH_RPC_COOKIE_FILE"),
+    headers: parseExtraHeaders(envStr("ZCASH_RPC_HEADERS")),
     timeoutMs: envInt("ZCASH_RPC_TIMEOUT_MS", DEFAULT_TIMEOUT_MS),
     jsonrpcVersion: envStr("ZCASH_RPC_JSONRPC_VERSION", "2.0") || "2.0",
   };
@@ -152,17 +222,27 @@ export function readRpcConfig(): RpcConfig {
 export function describeEndpoint(config: RpcConfig = readRpcConfig()): string {
   if (config.mode === "demo") return "demo (synthetic node)";
   if (!config.url) return "not configured";
+  let host: string;
   try {
-    const parsed = new URL(config.url);
-    const auth = config.user || config.password
-      ? "basic auth"
-      : config.cookieFile
-        ? "cookie auth"
-        : "token in URL";
-    return `${parsed.host} (${auth})`;
+    host = new URL(config.url).host;
   } catch {
     return "malformed ZCASH_RPC_URL";
   }
+
+  // Deliberately outside the try above: that catch is for one thing, an unparseable
+  // URL. Anything else going wrong here is a bug and should say so rather than be
+  // reported to the user as a malformed endpoint.
+  //
+  // Header *names* are safe to show and useful when debugging a 401 — knowing
+  // `x-api-key` is being sent is the whole question. The values never appear here,
+  // in any log, or in any thrown message.
+  const styles: string[] = [];
+  if (config.user || config.password) styles.push("basic auth");
+  else if (config.cookieFile) styles.push("cookie auth");
+  const headerNames = Object.keys(config.headers);
+  if (headerNames.length > 0) styles.push(`header auth (${headerNames.join(", ")})`);
+  if (styles.length === 0) styles.push("token in URL");
+  return `${host} (${styles.join(" + ")})`;
 }
 
 export type RpcResponse<T> = {
@@ -210,6 +290,12 @@ async function postOnce<T>(
     headers.Authorization = `Basic ${readCookieAuth(config.cookieFile, method)}`;
   }
 
+  // Last, so a provider that wants its own header wins — including one that wants
+  // `Authorization: Bearer <token>` instead of the Basic header built above.
+  for (const [name, value] of Object.entries(config.headers)) {
+    headers[name] = value;
+  }
+
   let response: Response;
   try {
     response = await fetch(config.url, {
@@ -228,13 +314,16 @@ async function postOnce<T>(
   }
 
   if (response.status === 401 || response.status === 403) {
-    // A default modern zebrad lands here: cookie auth is on unless turned off,
-    // and an unauthenticated request gets 401. Saying so beats "Unauthorized",
-    // which sends people looking for an rpcuser they never had to set.
-    const hint =
-      config.user || config.password || config.cookieFile
-        ? ""
-        : " No credentials are configured. Zebra enables cookie auth by default — set ZCASH_RPC_COOKIE_FILE to its cookie file, or set enable_cookie_auth = false in zebrad.toml.";
+    // Two very different failures land here, so the hint has to distinguish them.
+    // A local zebrad: cookie auth is on unless turned off, and an unauthenticated
+    // request gets 401 — saying so beats "Unauthorized", which sends people looking
+    // for an rpcuser they never had to set. A hosted provider: the API key is
+    // usually a custom header, which is what ZCASH_RPC_HEADERS is for.
+    const authenticated =
+      config.user || config.password || config.cookieFile || Object.keys(config.headers).length > 0;
+    const hint = authenticated
+      ? " Credentials were sent, so they were rejected rather than missing — check the key itself, and that it is scoped to Zcash mainnet."
+      : " No credentials are configured. For a local zebrad, cookie auth is on by default — set ZCASH_RPC_COOKIE_FILE to its cookie file, or set enable_cookie_auth = false in zebrad.toml. For a hosted provider, put its API key in ZCASH_RPC_HEADERS.";
     throw new RpcAuthError(`Unauthorized.${hint}`, method, response.status);
   }
 

@@ -52,7 +52,7 @@ because the same one number at six times the request cost is not a better ticker
 ### `/node` — the endpoint
 
 - **The RPC surface, probed.** zcashd is deprecated, so the interesting question is no longer
-  *which implementation* but *which zebrad* — `getmempoolinfo`, `getnetworkinfo` and per-pool
+  _which implementation_ but _which zebrad_ — `getmempoolinfo`, `getnetworkinfo` and per-pool
   `valueDelta` all arrived partway through Zebra's life. ZPulse probes the node once and records what
   it answered; this table is that probe made visible. Any `unsupported` row is a call the app is
   routing around. The node's **identity** is a separate fact, read from its own user agent — never
@@ -91,11 +91,11 @@ when a node doesn't have a method.**
 
 | Method                   | What ZPulse uses it for                                                                                              |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `getblockchaininfo`      | The workhorse. Tip, chain, difficulty, sync progress, **`valuePools`**, `upgrades`, `consensus`.                      |
+| `getblockchaininfo`      | The workhorse. Tip, chain, difficulty, sync progress, **`valuePools`**, `upgrades`, `consensus`.                     |
 | `getblock` (verbosity 1) | Per-block `valueDelta` for each pool — the turnstile chart.                                                          |
 | `getblock` (verbosity 2) | Inline transaction objects — the privacy mix.                                                                        |
 | `z_gettreestate`         | Per-pool commitment tree roots — the shielded-state fingerprint, shown as independent evidence next to the balances. |
-| `getblocksubsidy`        | Issuance split including the lockbox stream; cross-checks ZPulse's own ZIP-208 model.                                 |
+| `getblocksubsidy`        | Issuance split including the lockbox stream; cross-checks ZPulse's own ZIP-208 model.                                |
 
 Take those five away and there is no app. `getblock` counts twice because its two verbosity modes
 return genuinely different payloads and feed different panels.
@@ -112,19 +112,19 @@ is immutable, it caches by hash forever.
 
 ### The eleven that make the first five survive a real node
 
-| Method                    | Role                        | What it's for                                                                                          |
-| ------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `getblockcount`           | cheapest signal             | The landing-page ticker, and the tip fallback when `getblockchaininfo` is unavailable.                  |
-| `getbestblockhash`        | tip fallback                | Tip identity when `getblockchaininfo` doesn't carry it.                                                 |
-| `getblockheader`          | primary                     | Two calls at the ends of a 24-block span give measured average block time and the upgrade ETA.          |
-| `getrawtransaction`       | fallback for `getblock` v2  | The privacy mix where verbosity 2 is unsupported — costs 1+N calls per block, and the panel says so.    |
-| `getmempoolinfo`          | primary                     | Mempool size and bytes in one call. Absent on a zebrad old enough to predate it.                        |
-| `getrawmempool` (verbose) | fallback for the above      | Sum the entry sizes client-side. `getrawmempool()` bare is the floor: a txid count, no byte total.      |
-| `getpeerinfo`             | primary                     | Peer count, inbound/outbound split, best peer height.                                                   |
-| `getnetworkinfo`          | primary                     | Node user agent and connection count. Also absent on an older zebrad.                                   |
-| `getinfo`                 | fallback for the above      | Version and build. Deprecated on zcashd, and the only version read an older zebrad answers.             |
-| `getnetworksolps`         | primary                     | Network hashrate.                                                                                       |
-| `getmininginfo`           | fallback for the above      | Hashrate when `getnetworksolps` is unavailable.                                                          |
+| Method                    | Role                       | What it's for                                                                                        |
+| ------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `getblockcount`           | cheapest signal            | The landing-page ticker, and the tip fallback when `getblockchaininfo` is unavailable.               |
+| `getbestblockhash`        | tip fallback               | Tip identity when `getblockchaininfo` doesn't carry it.                                              |
+| `getblockheader`          | primary                    | Two calls at the ends of a 24-block span give measured average block time and the upgrade ETA.       |
+| `getrawtransaction`       | fallback for `getblock` v2 | The privacy mix where verbosity 2 is unsupported — costs 1+N calls per block, and the panel says so. |
+| `getmempoolinfo`          | primary                    | Mempool size and bytes in one call. Absent on a zebrad old enough to predate it.                     |
+| `getrawmempool` (verbose) | fallback for the above     | Sum the entry sizes client-side. `getrawmempool()` bare is the floor: a txid count, no byte total.   |
+| `getpeerinfo`             | primary                    | Peer count, inbound/outbound split, best peer height.                                                |
+| `getnetworkinfo`          | primary                    | Node user agent and connection count. Also absent on an older zebrad.                                |
+| `getinfo`                 | fallback for the above     | Version and build. Deprecated on zcashd, and the only version read an older zebrad answers.          |
+| `getnetworksolps`         | primary                    | Network hashrate.                                                                                    |
+| `getmininginfo`           | fallback for the above     | Hashrate when `getnetworksolps` is unavailable.                                                      |
 
 Five **primary / fallback pairs** in that table, and each pair is one dialect resolver in
 `lib/rpc/dialect.ts`. That is the point of the count: a fallback you never call is a fallback you
@@ -416,3 +416,4 @@ falls back to memory and reports itself as non-durable on `/node` instead of pre
 
 Built for the [Zcash Foundation Sprint](https://zechub.wiki/hackathon) Mini Build Challenge.
 RPC surface documented at [zechub.wiki/developers](https://zechub.wiki/developers).
+.
