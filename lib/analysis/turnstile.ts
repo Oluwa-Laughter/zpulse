@@ -11,6 +11,13 @@
  * pool trending negative, another trending positive, roughly offsetting. That is
  * the turnstile, measured rather than asserted.
  *
+ * Not every node hands over those deltas. Older zebrad builds return `valuePools`
+ * with cumulative `chainValue` only, so there is a second tier here: difference
+ * the running totals of consecutive blocks and you get the same per-block figure.
+ * Which tier produced the numbers is reported as `deltaSource` and rendered, in
+ * the same *reported / derived* vocabulary the supply panel uses — a derived
+ * chart is not a fabricated one, but the reader is entitled to know which it is.
+ *
  * The reason this is affordable: it is **one RPC call per block**, and blocks are
  * immutable so each call is made once ever. A 48-block window costs 48 calls the
  * first time and nothing thereafter.
@@ -22,6 +29,15 @@
 import type { Block } from "../rpc/types";
 import { ZATOSHI_PER_ZEC, formatZec, titleCasePoolId } from "./format";
 
+/**
+ * Where per-block pool movement came from.
+ *
+ * `reported` — the node returned `valueDelta`/`valueDeltaZat` per pool.
+ * `derived`  — computed from the difference of consecutive `chainValue` totals.
+ * `none`     — the node returned neither, so there is no flow to show.
+ */
+export type DeltaSource = "reported" | "derived" | "none";
+
 /** One block's worth of pool movement. */
 export type TurnstileSample = {
   height: number;
@@ -29,6 +45,12 @@ export type TurnstileSample = {
   time: number | null;
   /** Pool id → change in ZEC caused by this block. Positive means value entered. */
   deltas: Record<string, number>;
+  /**
+   * Pool id → cumulative balance in ZEC at this block, when the node reported one.
+   * Only used to derive `deltas` when the node did not report them directly.
+   */
+  chainValues: Record<string, number>;
+  deltaSource: DeltaSource;
 };
 
 export type FlowDirection = "draining" | "filling" | "flat";
@@ -64,6 +86,11 @@ export type TurnstileSummary = {
   narrative: string;
   /** Pool ids seen anywhere in the window, stable order for consistent colours. */
   poolIds: string[];
+  /**
+   * Whether the deltas above were reported by the node or derived from chain
+   * totals. `derived` is weaker evidence, so a mixed window reports `derived`.
+   */
+  deltaSource: DeltaSource;
 };
 
 /**
@@ -76,6 +103,7 @@ const DIRECTION_THRESHOLD_ZEC = 1;
 /** Extract per-pool deltas from a block, preferring the exact integer field. */
 export function sampleFromBlock(block: Block): TurnstileSample {
   const deltas: Record<string, number> = {};
+  const chainValues: Record<string, number> = {};
 
   for (const pool of block.valuePools ?? []) {
     const id = pool.id;
@@ -85,6 +113,11 @@ export function sampleFromBlock(block: Block): TurnstileSample {
     } else if (typeof pool.valueDelta === "number") {
       deltas[id] = pool.valueDelta;
     }
+    if (typeof pool.chainValueZat === "number") {
+      chainValues[id] = pool.chainValueZat / ZATOSHI_PER_ZEC;
+    } else if (typeof pool.chainValue === "number") {
+      chainValues[id] = pool.chainValue;
+    }
   }
 
   return {
@@ -92,7 +125,42 @@ export function sampleFromBlock(block: Block): TurnstileSample {
     hash: block.hash,
     time: typeof block.time === "number" ? block.time : null,
     deltas,
+    chainValues,
+    deltaSource: Object.keys(deltas).length > 0 ? "reported" : "none",
   };
+}
+
+/**
+ * Fill in deltas the node did not report, by differencing chain totals.
+ *
+ * Mutates the samples, which are freshly built here and not shared.
+ *
+ * Two constraints keep this honest:
+ *
+ *  · **Only across adjacent heights.** A gap in the window (one `getblock` failed)
+ *    would otherwise fold several blocks' movement into a single bar — a spike
+ *    that never happened. A gapped sample is left empty instead.
+ *  · **Only for pools present in both blocks.** A pool appearing for the first
+ *    time has no previous total to difference against, and treating its absence
+ *    as zero would post its entire opening balance as one block's inflow.
+ *
+ * Precision: totals are differenced in ZEC, which for a ~2×10⁶ ZEC pool carries
+ * float error under a zatoshi. The chart's own noise floor is 1 ZEC.
+ */
+function deriveMissingDeltas(samples: TurnstileSample[], baseline: TurnstileSample | null): void {
+  let previous = baseline;
+
+  for (const sample of samples) {
+    if (sample.deltaSource !== "reported" && previous && previous.height === sample.height - 1) {
+      for (const [id, total] of Object.entries(sample.chainValues)) {
+        const before = previous.chainValues[id];
+        if (typeof before !== "number") continue;
+        sample.deltas[id] = total - before;
+      }
+      if (Object.keys(sample.deltas).length > 0) sample.deltaSource = "derived";
+    }
+    previous = sample;
+  }
 }
 
 function directionOf(netZec: number): FlowDirection {
@@ -151,8 +219,16 @@ function describeFlows(flows: PoolFlow[], blocks: number): string {
  *
  * Blocks may arrive in any order and may contain gaps (a `getblock` in the
  * window can fail without sinking the panel); they are sorted by height here.
+ *
+ * `options.baseline` is the block immediately below the window. It is only read
+ * to give the oldest block in the window something to difference against when
+ * the node does not report deltas, and it never appears in the output — the
+ * window the caller asked for is the window it gets back.
  */
-export function summarizeTurnstile(blocks: Block[]): TurnstileSummary {
+export function summarizeTurnstile(
+  blocks: Block[],
+  options: { baseline?: Block | null } = {},
+): TurnstileSummary {
   const samples = blocks
     .filter((block) => typeof block?.height === "number")
     .map(sampleFromBlock)
@@ -167,8 +243,22 @@ export function summarizeTurnstile(blocks: Block[]): TurnstileSummary {
       netAllPoolsZec: 0,
       narrative: "No block data available for this window.",
       poolIds: [],
+      deltaSource: "none",
     };
   }
+
+  const baseline =
+    options.baseline && typeof options.baseline.height === "number"
+      ? sampleFromBlock(options.baseline)
+      : null;
+  deriveMissingDeltas(samples, baseline);
+
+  // Weakest tier wins, so the label never claims more than the numbers support.
+  const deltaSource: DeltaSource = samples.some((sample) => sample.deltaSource === "derived")
+    ? "derived"
+    : samples.some((sample) => sample.deltaSource === "reported")
+      ? "reported"
+      : "none";
 
   // Union of pool ids across the window: a pool that moved in only one block
   // still gets a full-length series, zero-filled.
@@ -242,5 +332,6 @@ export function summarizeTurnstile(blocks: Block[]): TurnstileSummary {
     netAllPoolsZec: flows.reduce((total, flow) => total + flow.netZec, 0),
     narrative: describeFlows(flows, samples.length),
     poolIds,
+    deltaSource,
   };
 }

@@ -602,19 +602,31 @@ test("a node with no upgrades map degrades with a note", () => {
  * capability probing, dialect routing, caching, composition — against the
  * synthetic node in lib/rpc/demo.ts.
  *
- * The demo node deliberately emulates **zebrad**: it refuses `getnetworkinfo`
- * and `getmempoolinfo` with -32601, exactly as Zebra does. So these assertions
- * are a regression test for the specific bug that motivated the whole dialect
- * layer — the earlier prototype called those two methods unconditionally and
- * would have returned a 500 against the node the workshop deck points at.
+ * The demo node emulates zebrad, and it does so at two ages, because "zebrad" is
+ * not one target: `getmempoolinfo`, `getnetworkinfo` and per-pool `valueDelta` on
+ * `getblock` all arrived partway through Zebra's life.
+ *
+ *   zebra         (default) a current node. Everything answers. This is what a
+ *                 reader following the README will actually be running, so it is
+ *                 the profile the bulk of these tests use.
+ *   zebra-legacy  an older node. The section further down runs against it, and it
+ *                 is where the dialect layer is actually put under load: every
+ *                 fallback path fires, and the turnstile has to reconstruct flows
+ *                 the node does not report.
  */
 
-section("data layer — demo node (emulates zebrad)");
+// Pin the default explicitly. Otherwise a ZPULSE_DEMO_PROFILE left in the shell
+// would silently decide which node this section runs against, and withDemoProfile
+// would restore to it — turning "the default profile" into "whatever you exported".
+delete process.env.ZPULSE_DEMO_PROFILE;
+
+section("data layer — demo node (current zebrad)");
 
 const { getCapabilities, getChain, getHeight, getNode, getPools, getPrivacy, getTurnstile, getUpgrades, describeConfig, takeSnapshot } =
   await import("../lib/data.ts");
 const { cacheStats, clearCache } = await import("../lib/cache.ts");
-const { FEATURE_BLOCK_VERBOSITY_2 } = await import("../lib/rpc/capabilities.ts");
+const { FEATURE_BLOCK_VALUE_DELTA, FEATURE_BLOCK_VERBOSITY_2, resetCapabilityCache } =
+  await import("../lib/rpc/capabilities.ts");
 
 async function asyncTest(name, fn) {
   try {
@@ -628,15 +640,56 @@ async function asyncTest(name, fn) {
   }
 }
 
-await asyncTest("capability probe identifies the node as zebra-like", async () => {
+/**
+ * Run a block of tests against a specific demo-node profile.
+ *
+ * Both the response cache and the capability cache are per-process and neither
+ * has invalidation, because a real node does not gain or lose RPC methods while
+ * it is running. Swapping the node underneath them is a thing only a test does,
+ * so both are cleared on the way in and again on the way out — otherwise a probe
+ * result from the previous profile would decide the next profile's fallbacks.
+ */
+async function withDemoProfile(profile, fn) {
+  const previous = process.env.ZPULSE_DEMO_PROFILE;
+  process.env.ZPULSE_DEMO_PROFILE = profile;
+  clearCache();
+  resetCapabilityCache();
+  try {
+    await fn();
+  } finally {
+    if (previous === undefined) delete process.env.ZPULSE_DEMO_PROFILE;
+    else process.env.ZPULSE_DEMO_PROFILE = previous;
+    clearCache();
+    resetCapabilityCache();
+  }
+}
+
+await asyncTest("identity comes from the user agent, not from which methods are missing", async () => {
+  // The bug this pins down: an earlier version inferred "Zebra" from the absence
+  // of getmempoolinfo. Current Zebra implements it, so that inference labelled
+  // every modern zebrad as zcashd. Identity is now read, not deduced — which
+  // means a node answering every method must still identify as zebra.
   const { data } = await getCapabilities();
-  assert.equal(data.dialect, "zebra-like");
+  assert.equal(data.implementation, "zebra");
+  assert.match(data.userAgent, /Zebra/, `unexpected user agent: ${data.userAgent}`);
+
+  const unsupported = data.entries.filter((entry) => !entry.supported);
+  assert.deepEqual(
+    unsupported.map((entry) => entry.key),
+    [],
+    "a current zebrad should answer every probe, including the two once thought Zebra lacked",
+  );
   const has = (key) => data.entries.find((entry) => entry.key === key)?.supported;
-  assert.equal(has("getnetworkinfo"), false, "getnetworkinfo must probe as unsupported");
-  assert.equal(has("getmempoolinfo"), false, "getmempoolinfo must probe as unsupported");
-  assert.equal(has("getblockchaininfo"), true);
-  assert.equal(has("getrawmempool"), true);
+  assert.equal(has("getnetworkinfo"), true);
+  assert.equal(has("getmempoolinfo"), true);
   assert.equal(has(FEATURE_BLOCK_VERBOSITY_2), true);
+  assert.equal(has(FEATURE_BLOCK_VALUE_DELTA), true);
+
+  // The three probe kinds are distinct, and the console depends on the
+  // distinction: only a `method` row being unsupported means -32601.
+  const kinds = new Set(data.entries.map((entry) => entry.kind));
+  assert.deepEqual([...kinds].sort(), ["feature", "method", "shape"]);
+  assert.equal(data.entries.find((entry) => entry.key === FEATURE_BLOCK_VALUE_DELTA).kind, "shape");
 });
 
 await asyncTest("credentials never leak: endpoint description carries no URL or token", async () => {
@@ -655,17 +708,18 @@ await asyncTest("getChain returns a live-looking tip and names the method that p
   assert.equal(meta.degraded, false, `unexpected notes: ${meta.notes.join(" | ")}`);
 });
 
-await asyncTest("THE REGRESSION TEST: node panel routes around the two zcashd-only methods", async () => {
+await asyncTest("node panel takes the one-call path when the node has it", async () => {
   const { data, meta } = await getNode();
-  // Both of these would have thrown in the earlier prototype.
-  assert.ok(data.mempool !== null, "mempool must resolve without getmempoolinfo");
-  assert.ok(data.version !== null, "version must resolve without getnetworkinfo");
-  assert.ok(meta.via.includes("getrawmempool"), "should have fallen back to getrawmempool");
-  assert.ok(meta.via.includes("getinfo"), "should have fallen back to getinfo for the version");
-  assert.ok(!meta.via.includes("getmempoolinfo"), "must not have called the unsupported method");
-  assert.ok(!meta.via.includes("getnetworkinfo"), "must not have called the unsupported method");
+  assert.ok(data.mempool !== null);
+  assert.ok(data.version !== null);
+  // The cheap path: one call each, and specifically NOT the fallbacks, which cost
+  // a verbose mempool dump and a client-side sum.
+  assert.ok(meta.via.includes("getmempoolinfo"), "should prefer getmempoolinfo on a node that has it");
+  assert.ok(meta.via.includes("getnetworkinfo"), "should prefer getnetworkinfo on a node that has it");
+  assert.ok(data.mempool.bytes !== null, "getmempoolinfo reports bytes directly");
   assert.ok(data.peers.count > 0);
   assert.ok(data.solps > 0);
+  assert.equal(meta.degraded, false, `unexpected notes: ${meta.notes.join(" | ")}`);
 });
 
 await asyncTest("supply panel reconciles, and the node agrees with the issuance model", async () => {
@@ -685,9 +739,18 @@ await asyncTest("supply panel reconciles, and the node agrees with the issuance 
 });
 
 await asyncTest("turnstile shows one pool draining and another filling", async () => {
+  // This assertion used to be a coin flip. The demo tip advances with the wall
+  // clock, so the window lands somewhere different every run, and hash32() was
+  // bare FNV-1a with no output avalanche — lag-1 correlation 0.8796, and 8.26% of
+  // 16-block windows had no pool movement at all. Adding MurmurHash3's fmix32
+  // finalizer took that to correlation -0.0036 and a longest all-flat run of 6.
+  // Checked exhaustively afterwards: all 460,737 consecutive 16-block windows
+  // across 400 days of synthetic chain satisfy the three assertions below, so
+  // this test no longer depends on what day it runs.
   const { data, meta } = await getTurnstile(16);
   assert.equal(data.requestedBlocks, 16);
   assert.equal(data.window.blocks, 16);
+  assert.equal(data.deltaSource, "reported", "a current zebrad reports valueDelta directly");
   assert.ok(data.flows.length >= 2);
   assert.ok(
     data.flows.some((flow) => flow.direction === "draining"),
@@ -791,9 +854,141 @@ await asyncTest("the demo tip advances with the clock, so the live ticker genuin
 await asyncTest("an unsupported method still throws rather than being papered over", async () => {
   const { rpcCall } = await import("../lib/rpc/client.ts");
   const { RpcUnsupportedError } = await import("../lib/rpc/errors.ts");
-  await assert.rejects(() => rpcCall("getmempoolinfo"), RpcUnsupportedError);
-  // The point: demo mode is not a yes-machine. It refuses what zebrad refuses,
-  // so the dialect fallbacks are exercised instead of being masked.
+  // getaddressbalance is real on zcashd and on Zebra with the address index
+  // enabled, and the demo node does not implement it. So it is the right shape of
+  // "no": a method that exists in the world but not on this endpoint.
+  //
+  // The point is that demo mode is not a yes-machine. If the fixture answered
+  // everything, the dialect fallbacks would never be exercised by these tests and
+  // a broken fallback would ship green.
+  await assert.rejects(() => rpcCall("getaddressbalance", [{ addresses: [] }]), RpcUnsupportedError);
+});
+
+/* ── the older zebrad ────────────────────────────────────────────────────── */
+
+/**
+ * Everything above ran against a node that answers every method. That is the easy
+ * case, and it is not the case the dialect layer exists for.
+ *
+ * This section runs the same stack against `zebra-legacy` — a zebrad old enough to
+ * predate `getmempoolinfo`, `getnetworkinfo` and per-pool `valueDelta`. Every
+ * fallback tier fires here, and the turnstile has to reconstruct flows from
+ * consecutive pool totals because the node does not report them.
+ *
+ * These are the assertions that used to be the "regression test" above, when this
+ * file wrongly believed *all* zebrad refused those two methods. The tests were
+ * good; only their premise about which node lacked the methods was wrong. So they
+ * moved rather than being deleted.
+ */
+
+section("data layer — older zebrad (every fallback fires)");
+
+await withDemoProfile("zebra-legacy", async () => {
+  await asyncTest("node panel routes around methods this node predates", async () => {
+    const { data, meta } = await getNode();
+    // Both of these would have thrown in the original prototype, which called the
+    // two methods unconditionally.
+    assert.ok(data.mempool !== null, "mempool must resolve without getmempoolinfo");
+    assert.ok(data.version !== null, "version must resolve without getnetworkinfo");
+    assert.ok(meta.via.includes("getrawmempool"), "should have fallen back to getrawmempool");
+    assert.ok(meta.via.includes("getinfo"), "should have fallen back to getinfo for the version");
+    assert.ok(!meta.via.includes("getmempoolinfo"), "must not have called the unsupported method");
+    assert.ok(!meta.via.includes("getnetworkinfo"), "must not have called the unsupported method");
+    assert.ok(data.peers.count > 0);
+    assert.ok(data.solps > 0);
+  });
+
+  await asyncTest("the two methods really are -32601 on this profile", async () => {
+    const { rpcCall } = await import("../lib/rpc/client.ts");
+    const { RpcUnsupportedError } = await import("../lib/rpc/errors.ts");
+    await assert.rejects(() => rpcCall("getmempoolinfo"), RpcUnsupportedError);
+    await assert.rejects(() => rpcCall("getnetworkinfo"), RpcUnsupportedError);
+  });
+
+  await asyncTest("identity survives a node that answers fewer methods", async () => {
+    // The inverse of the modern-profile test: fewer methods must not change who
+    // the node says it is. Both profiles report /Zebra:.../ and both classify as
+    // zebra, because the classification reads the user agent.
+    const { data } = await getCapabilities();
+    assert.equal(data.implementation, "zebra");
+    assert.match(data.userAgent, /Zebra/);
+    const has = (key) => data.entries.find((entry) => entry.key === key)?.supported;
+    assert.equal(has("getmempoolinfo"), false);
+    assert.equal(has("getnetworkinfo"), false);
+    assert.equal(has(FEATURE_BLOCK_VALUE_DELTA), false, "this node's getblock omits valueDelta");
+    assert.equal(has("getblockchaininfo"), true, "the core five must still answer");
+  });
+
+  await asyncTest("THE REGRESSION TEST: the turnstile derives flows the node never reported", async () => {
+    const { data, meta } = await getTurnstile(16);
+    assert.equal(
+      data.deltaSource,
+      "derived",
+      "with no valueDelta field, deltas must come from differencing chainValue",
+    );
+    assert.equal(data.window.blocks, 16);
+    assert.ok(data.flows.length >= 2, "a derived chart is still a chart");
+    assert.ok(
+      data.flows.some((flow) => flow.direction === "draining"),
+      "expected a draining pool",
+    );
+    assert.ok(
+      data.flows.some((flow) => flow.direction === "filling"),
+      "expected a filling pool",
+    );
+    for (const flow of data.flows) {
+      assert.equal(flow.series.length, 16, `${flow.id} series must span the window`);
+    }
+    // Deriving costs one block below the window, for the oldest block's baseline.
+    assert.ok(meta.via.includes("getblock"));
+    assert.ok(
+      meta.notes.some((note) => /derived/i.test(note)),
+      `the panel must say "derived" out loud: ${meta.notes.join(" | ")}`,
+    );
+  });
+});
+
+await asyncTest("derived deltas agree with reported ones to within a zatoshi", async () => {
+  /**
+   * The claim the derived tier rests on: differencing consecutive `chainValue`
+   * totals gives the same answer the node would have reported.
+   *
+   * It is exact rather than approximate, and the reason is scale. `chainValueZat`
+   * is an integer near 1e14 — comfortably inside 2^53 — so the subtraction loses
+   * nothing. Only the ZEC-denominated float carries any error at all, and it
+   * telescopes: measured agreement below is ~1e-10 ZEC, four orders of magnitude
+   * finer than one zatoshi (1e-8).
+   *
+   * Both profiles are read at the same window here so the comparison is like for
+   * like. Anything else would be comparing two different stretches of chain.
+   */
+  const blocks = 60;
+  let reported;
+  let derived;
+  await withDemoProfile("zebra", async () => {
+    reported = (await getTurnstile(blocks)).data;
+  });
+  await withDemoProfile("zebra-legacy", async () => {
+    derived = (await getTurnstile(blocks)).data;
+  });
+
+  assert.equal(reported.deltaSource, "reported");
+  assert.equal(derived.deltaSource, "derived");
+  assert.equal(reported.window.fromHeight, derived.window.fromHeight, "same window, or no comparison");
+  assert.deepEqual(derived.poolIds, reported.poolIds, "deriving must not invent or drop a pool");
+
+  const ZATOSHI = 1e-8;
+  for (const expected of reported.flows) {
+    const actual = derived.flows.find((flow) => flow.id === expected.id);
+    assert.ok(actual, `derived flows are missing ${expected.id}`);
+    const drift = Math.abs(actual.netZec - expected.netZec);
+    assert.ok(
+      drift < ZATOSHI,
+      `${expected.id}: derived net ${actual.netZec} vs reported ${expected.netZec} (drift ${drift})`,
+    );
+    assert.equal(actual.direction, expected.direction, `${expected.id} direction disagrees`);
+  }
+  assert.equal(derived.narrative, reported.narrative, "the same flows must read the same way");
 });
 
 /* ── console allowlist: the security boundary ────────────────────────────── */
@@ -1007,7 +1202,12 @@ const storeDir = `${process.env.TMPDIR ?? "/tmp"}/zpulse-verify-${process.pid}`;
 process.env.ZPULSE_HISTORY_PATH = `${storeDir}/history.jsonl`;
 
 const { JsonlHistoryStore } = await import("../lib/store/jsonl.ts");
-const { appendFile: appendRaw, mkdir: mkdirRaw, rm: rmRaw } = await import("node:fs/promises");
+const {
+  appendFile: appendRaw,
+  mkdir: mkdirRaw,
+  rm: rmRaw,
+  writeFile: writeRaw,
+} = await import("node:fs/promises");
 
 await asyncTest("rows round-trip through the file, oldest first", async () => {
   const path = `${storeDir}/roundtrip.jsonl`;
@@ -1300,7 +1500,7 @@ await asyncTest("GET /api/capabilities publishes the probe results and leaks no 
   const { GET } = await import("../app/api/capabilities/route.ts");
   const { response, body } = await callRoute(GET, "http://localhost:3000/api/capabilities");
   assert.equal(response.status, 200);
-  assert.equal(body.data.dialect, "zebra-like");
+  assert.equal(body.data.implementation, "zebra");
   assert.ok(body.data.entries.length > 10);
   assert.equal(body.data.config.mode, "demo");
   assert.doesNotMatch(JSON.stringify(body), /password|apikey|api_key/i);
@@ -1354,21 +1554,25 @@ await asyncTest("POST /api/rpc refuses a mutating method with 400, having contac
   }
 });
 
-await asyncTest("POST /api/rpc reports a node's -32601 as a result, not as a server failure", async () => {
-  // The dialect-tell recipe depends on this: seeing getmempoolinfo fail is the
-  // demonstration, so it must render where a result would, at status 200.
-  const { POST } = await import("../app/api/rpc/route.ts");
-  resetRateLimits();
-  const { response, body } = await callRoute(POST, "http://localhost:3000/api/rpc", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-forwarded-for": "198.51.100.6" },
-    body: JSON.stringify({ method: "getmempoolinfo", params: [] }),
+await withDemoProfile("zebra-legacy", async () => {
+  await asyncTest("POST /api/rpc reports a node's -32601 as a result, not as a server failure", async () => {
+    // The version-tell recipe depends on this: watching getmempoolinfo come back
+    // -32601 is the demonstration, so it has to render where a result would, at
+    // status 200. A 500 would read as "the console is broken" instead of "this
+    // node is older than that method".
+    const { POST } = await import("../app/api/rpc/route.ts");
+    resetRateLimits();
+    const { response, body } = await callRoute(POST, "http://localhost:3000/api/rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": "198.51.100.6" },
+      body: JSON.stringify({ method: "getmempoolinfo", params: [] }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal(body.data.ok, false);
+    assert.match(body.data.error.message, /does not support/i);
+    assert.equal(body.data.request.method, "getmempoolinfo");
+    assert.equal(body.meta.degraded, true);
   });
-  assert.equal(response.status, 200);
-  assert.equal(body.data.ok, false);
-  assert.match(body.data.error.message, /does not support/i);
-  assert.equal(body.data.request.method, "getmempoolinfo");
-  assert.equal(body.meta.degraded, true);
 });
 
 await asyncTest("POST /api/rpc rejects malformed JSON without consulting the allowlist", async () => {
@@ -1519,6 +1723,191 @@ await asyncTest("every route survives an unreachable node with an error envelope
     else process.env.ZCASH_RPC_MODE = previousMode;
     clear();
     resetCapabilityCache();
+  }
+});
+
+/* ── cookie auth: the thing that stops a default zebrad answering ────────── */
+
+/**
+ * Zebra 2.x ships `enable_cookie_auth = true`, so a freshly-built zebrad answers
+ * HTTP 401 to an unauthenticated request. That is the likeliest reason following
+ * the README against a real node fails, and it is not something demo mode can
+ * surface — demo mode never opens a socket.
+ *
+ * So these tests stub `globalThis.fetch`, which is what the transport calls, and
+ * inspect the request it was about to send. That verifies the half of cookie auth
+ * that lives in this repo: reading the file, and encoding it the way Bitcoin Core
+ * established and Zebra copied. The other half — that a real zebrad accepts what
+ * we send — needs a real zebrad, and is flagged as unverified in the README.
+ */
+
+section("cookie auth");
+
+let cookieFixtureCounter = 0;
+
+/**
+ * Write a cookie file, point the transport at a dead socket, and capture the
+ * request it tries to make.
+ *
+ * Each call gets its own path on purpose. The client caches the encoded cookie
+ * against the file's mtime, and filesystem mtime granularity is coarse enough that
+ * two writes within the same millisecond can look unchanged — which would make one
+ * test silently reuse the previous test's credential.
+ */
+async function captureCookieRequest(cookieContents) {
+  cookieFixtureCounter += 1;
+  const cookiePath = `${storeDir}/zebra-cookie-${cookieFixtureCounter}`;
+  await mkdirRaw(storeDir, { recursive: true });
+  await writeRaw(cookiePath, cookieContents);
+
+  const previous = {
+    mode: process.env.ZCASH_RPC_MODE,
+    url: process.env.ZCASH_RPC_URL,
+    cookie: process.env.ZCASH_RPC_COOKIE_FILE,
+    fetch: globalThis.fetch,
+  };
+  process.env.ZCASH_RPC_MODE = "live";
+  process.env.ZCASH_RPC_URL = "http://127.0.0.1:1/";
+  process.env.ZCASH_RPC_COOKIE_FILE = cookiePath;
+
+  const seen = [];
+  globalThis.fetch = async (url, init) => {
+    seen.push({ url, headers: init?.headers ?? {}, body: init?.body });
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: "1", result: 42 }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    const { rpcCall } = await import("../lib/rpc/client.ts");
+    return { seen, result: await rpcCall("getblockcount"), cookiePath, error: null };
+  } catch (err) {
+    return { seen, result: null, cookiePath, error: err };
+  } finally {
+    globalThis.fetch = previous.fetch;
+    if (previous.mode === undefined) delete process.env.ZCASH_RPC_MODE;
+    else process.env.ZCASH_RPC_MODE = previous.mode;
+    if (previous.url === undefined) delete process.env.ZCASH_RPC_URL;
+    else process.env.ZCASH_RPC_URL = previous.url;
+    if (previous.cookie === undefined) delete process.env.ZCASH_RPC_COOKIE_FILE;
+    else process.env.ZCASH_RPC_COOKIE_FILE = previous.cookie;
+    await rmRaw(cookiePath, { force: true });
+  }
+}
+
+await asyncTest("a cookie file becomes an Authorization: Basic header, encoded verbatim", async () => {
+  // Zebra writes one line: `__cookie__:<secret>`. Those contents *are* the
+  // user:password pair, so they are base64'd whole rather than split and
+  // reassembled — splitting would corrupt any secret containing a colon.
+  const secret = "sHK9pQ2vX7mR4tL0";
+  const { seen, result, error } = await captureCookieRequest(`__cookie__:${secret}\n`);
+  assert.equal(error, null, `unexpected failure: ${error?.message}`);
+  assert.equal(result, 42);
+  assert.equal(seen.length, 1, "one call, no retry");
+  assert.equal(
+    seen[0].headers.Authorization,
+    `Basic ${Buffer.from(`__cookie__:${secret}`).toString("base64")}`,
+  );
+  // The trailing newline must not survive into the credential — Zebra's file has one.
+  const decoded = Buffer.from(seen[0].headers.Authorization.slice(6), "base64").toString("utf8");
+  assert.equal(decoded, `__cookie__:${secret}`);
+});
+
+await asyncTest("explicit credentials win over a cookie file", async () => {
+  // A zcashd, or a basic-auth proxy in front of zebrad, wants what you configured —
+  // not whatever cookie happens to be sitting in a cache directory.
+  const previousUser = process.env.ZCASH_RPC_USER;
+  const previousPassword = process.env.ZCASH_RPC_PASSWORD;
+  process.env.ZCASH_RPC_USER = "alice";
+  process.env.ZCASH_RPC_PASSWORD = "hunter2";
+  try {
+    const { seen, error } = await captureCookieRequest("__cookie__:ignored-secret\n");
+    assert.equal(error, null, `unexpected failure: ${error?.message}`);
+    assert.equal(
+      seen[0].headers.Authorization,
+      `Basic ${Buffer.from("alice:hunter2").toString("base64")}`,
+    );
+    const decoded = Buffer.from(seen[0].headers.Authorization.slice(6), "base64").toString("utf8");
+    assert.doesNotMatch(decoded, /ignored-secret/, "the cookie must not be sent");
+  } finally {
+    if (previousUser === undefined) delete process.env.ZCASH_RPC_USER;
+    else process.env.ZCASH_RPC_USER = previousUser;
+    if (previousPassword === undefined) delete process.env.ZCASH_RPC_PASSWORD;
+    else process.env.ZCASH_RPC_PASSWORD = previousPassword;
+  }
+});
+
+await asyncTest("an unreadable cookie file fails loudly, naming the path and nothing else", async () => {
+  const previousMode = process.env.ZCASH_RPC_MODE;
+  const previousUrl = process.env.ZCASH_RPC_URL;
+  const previousCookie = process.env.ZCASH_RPC_COOKIE_FILE;
+  const missing = `${storeDir}/definitely-not-here/.cookie`;
+  process.env.ZCASH_RPC_MODE = "live";
+  process.env.ZCASH_RPC_URL = "http://127.0.0.1:1/";
+  process.env.ZCASH_RPC_COOKIE_FILE = missing;
+
+  try {
+    const { rpcCall } = await import("../lib/rpc/client.ts");
+    const { RpcConfigError } = await import("../lib/rpc/errors.ts");
+    // Quietly sending no Authorization header would turn this into a 401 from the
+    // node — a misconfiguration wearing a node problem's clothes. It has to be a
+    // config error, and it has to name the path, because a typo is the likely cause.
+    await assert.rejects(
+      () => rpcCall("getblockcount"),
+      (err) => {
+        assert.ok(
+          err instanceof RpcConfigError,
+          `expected RpcConfigError, got ${err?.constructor?.name}: ${err?.message}`,
+        );
+        assert.ok(err.message.includes(missing), `must name the path: ${err.message}`);
+        assert.match(err.message, /enable_cookie_auth/, "and must say how to opt out");
+        return true;
+      },
+    );
+  } finally {
+    if (previousMode === undefined) delete process.env.ZCASH_RPC_MODE;
+    else process.env.ZCASH_RPC_MODE = previousMode;
+    if (previousUrl === undefined) delete process.env.ZCASH_RPC_URL;
+    else process.env.ZCASH_RPC_URL = previousUrl;
+    if (previousCookie === undefined) delete process.env.ZCASH_RPC_COOKIE_FILE;
+    else process.env.ZCASH_RPC_COOKIE_FILE = previousCookie;
+  }
+});
+
+await asyncTest("a file that is not a cookie file is rejected rather than sent", async () => {
+  // Pointing this at the wrong file is easy. If it does not look like Zebra's
+  // cookie, say so here instead of base64ing a stray config file into a header —
+  // and say it without quoting the file back, since the next wrong file might be
+  // a real secret.
+  const { seen, error } = await captureCookieRequest("this is not a credential\n");
+  assert.equal(seen.length, 0, "nothing should have been sent");
+  assert.ok(error, "expected a rejection");
+  assert.match(error.message, /user:secret/);
+  assert.doesNotMatch(error.message, /this is not a credential/, "must not echo the contents");
+});
+
+await asyncTest("the endpoint description names the auth style without leaking the token", async () => {
+  // Hosted providers put the access token in the URL *path*, which is why only the
+  // host is ever surfaced. This also gives /node something honest to show about how
+  // it is authenticating, which is otherwise invisible.
+  const { describeEndpoint } = await import("../lib/rpc/client.ts");
+  const base = {
+    mode: "live",
+    url: "https://node.example.com/AbCdEfSecretToken123",
+    timeoutMs: 1,
+    jsonrpcVersion: "2.0",
+  };
+  const cases = [
+    [{ user: "", password: "", cookieFile: "" }, "node.example.com (token in URL)"],
+    [{ user: "", password: "", cookieFile: "/var/cache/zebra/.cookie" }, "node.example.com (cookie auth)"],
+    [{ user: "alice", password: "hunter2", cookieFile: "" }, "node.example.com (basic auth)"],
+  ];
+  for (const [auth, expected] of cases) {
+    const rendered = describeEndpoint({ ...base, ...auth });
+    assert.equal(rendered, expected);
+    assert.doesNotMatch(rendered, /AbCdEfSecretToken123/, "the URL path is where the token lives");
+    assert.doesNotMatch(rendered, /hunter2|\.cookie/, "credentials are not part of a description");
   }
 });
 

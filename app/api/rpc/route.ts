@@ -68,13 +68,13 @@ const RECIPES = [
     ],
   },
   {
-    id: "dialect-tell",
-    title: "Find out which node implementation this is",
-    why: "getmempoolinfo and getnetworkinfo exist on zcashd and not on Zebra. Whichever of these fails with -32601 tells you what you are talking to — and is exactly the failure the dialect layer routes around.",
+    id: "version-tell",
+    title: "Find out how old this node is",
+    why: "zcashd is deprecated, so the interesting question is no longer which implementation this is — it is which zebrad. getmempoolinfo arrived partway through Zebra's life, so a -32601 here dates the node, and the third step is the older path to the same numbers. Run it against a current node and all three succeed; that identical result is the point.",
     steps: [
-      { method: "getinfo", params: [] as unknown[], use: "Version. Both dialects answer this." },
-      { method: "getmempoolinfo", params: [], use: "zcashd only. Expect -32601 on Zebra." },
-      { method: "getrawmempool", params: [true], use: "The Zebra-compatible path to the same information." },
+      { method: "getinfo", params: [] as unknown[], use: "Version and build, straight from the node." },
+      { method: "getmempoolinfo", params: [], use: "Size and bytes in one call. -32601 here means an older zebrad." },
+      { method: "getrawmempool", params: [true], use: "The fallback ZPulse uses when the call above fails: same numbers, summed client-side." },
     ],
   },
 ] as const;
@@ -160,7 +160,7 @@ export async function POST(request: Request): Promise<Response> {
     });
   } catch (err) {
     // A node saying "no" is a legitimate console result, not a server failure —
-    // the dialect-tell recipe above depends on being able to show a -32601. So
+    // the version-tell recipe above depends on being able to show a -32601. So
     // this returns 200 with `ok: false` rather than a 5xx, and the UI renders the
     // error where it would have rendered the result.
     return okJson({

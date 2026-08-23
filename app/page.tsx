@@ -57,10 +57,10 @@ const FEATURES = [
   {
     href: "/node",
     kicker: "Dialect layer",
-    title: "Speaks zcashd and Zebra, not just one",
+    title: "Works on the zebrad you have, not the one it was written against",
     body:
-      "zcashd is deprecated and Zebra implements neither getnetworkinfo nor getmempoolinfo. ZPulse probes the node once, caches what it answers, and satisfies each panel through whichever method that node actually has.",
-    methods: ["capability probe", "-32601 detection"],
+      "getmempoolinfo, getnetworkinfo and per-pool valueDelta all arrived partway through Zebra's life, so two zebrads differ. ZPulse probes the node once, caches what it answers, and satisfies each panel through whichever method that node actually has — and reads its identity from its user agent rather than guessing it from what is missing.",
+    methods: ["capability probe", "-32601 detection", "field probe"],
   },
 ];
 

@@ -33,6 +33,7 @@ import { buildUpgradeTimeline, type UpgradeTimeline } from "./analysis/upgrades"
 import { probeAll, type CapabilityReport } from "./rpc/capabilities";
 import { describeEndpoint, isDemoMode, readRpcConfig } from "./rpc/client";
 import {
+  fetchBlockHeader,
   fetchBlockLite,
   fetchBlockSubsidy,
   fetchBlockWithTxs,
@@ -48,7 +49,7 @@ import {
   type Resolved,
 } from "./rpc/dialect";
 import { methodStats, totalCalls, type MethodStat } from "./rpc/telemetry";
-import type { Block, DataSource, RawTransaction, TreeState } from "./rpc/types";
+import type { Block, BlockHeader, DataSource, RawTransaction, TreeState } from "./rpc/types";
 
 /* ── envelope ────────────────────────────────────────────────────────────── */
 
@@ -240,6 +241,20 @@ async function loadBlockWithTxs(height: number, tipHeight: number) {
   return result.value;
 }
 
+/**
+ * Fetch one block header, cached with reorg-aware TTL.
+ *
+ * A separate cache key from `block:v1:<height>`, because a header is a different
+ * (smaller) payload for the same height and conflating them would mean a header
+ * read serving a caller that needs `valuePools`.
+ */
+async function loadBlockHeader(height: number, tipHeight: number): Promise<Resolved<BlockHeader>> {
+  const result = await cached(`header:${height}`, blockTtlFor(height, tipHeight), () =>
+    fetchBlockHeader(height),
+  );
+  return result.value;
+}
+
 /** Heights for a window ending at the tip, oldest first. */
 function windowHeights(tipHeight: number, size: number): number[] {
   const from = Math.max(0, tipHeight - size + 1);
@@ -287,7 +302,7 @@ export async function getPools(): Promise<Envelope<PoolsData | null>> {
   const extraNotes: string[] = [];
   if (supply.pools.length === 0) {
     extraNotes.push(
-      "This node reported no value pools, so shielded balances are unavailable. getblockchaininfo carries them on zcashd-family nodes.",
+      "This node reported no value pools, so shielded balances are unavailable. Every current zebrad carries them on getblockchaininfo, so an empty list points at a node still syncing or a proxy stripping fields.",
     );
   }
   if (supply.unrecognisedPools.length > 0) {
@@ -327,30 +342,49 @@ export async function getTurnstile(windowSize?: number): Promise<Envelope<Turnst
   const tipHeight = tip.value.height;
   const heights = windowHeights(tipHeight, size);
 
-  const resolved = await mapLimit(heights, BLOCK_FETCH_CONCURRENCY, (height) =>
-    loadBlockLite(height, tipHeight),
-  );
+  // One block below the window, so the oldest block in the window has something
+  // to difference against on a node that reports cumulative totals but no
+  // per-block deltas. It is a normal immutable block:v1 cache entry — on the
+  // second render of the same window it costs nothing — and it is deliberately
+  // left out of `requestedBlocks`, the missing-block count and `meta`: the
+  // caller asked for `size` blocks, and a baseline it cannot see should not be
+  // able to mark the panel degraded.
+  const baselineHeight = heights[0] !== undefined && heights[0] > 0 ? heights[0] - 1 : null;
+
+  const [resolved, baseline] = await Promise.all([
+    mapLimit(heights, BLOCK_FETCH_CONCURRENCY, (height) => loadBlockLite(height, tipHeight)),
+    baselineHeight === null
+      ? Promise.resolve(null)
+      : loadBlockLite(baselineHeight, tipHeight).catch(() => null),
+  ]);
 
   const blocks = resolved
     .map((entry) => entry.value)
     .filter((block): block is Block => block !== null);
 
-  const summary = summarizeTurnstile(blocks);
+  const summary = summarizeTurnstile(blocks, { baseline: baseline?.value ?? null });
 
   const extraNotes: string[] = [];
+  const extraVia: string[] = [];
   const missing = heights.length - blocks.length;
   if (missing > 0) {
     extraNotes.push(`${missing} of ${heights.length} blocks could not be fetched; the window is incomplete.`);
   }
-  if (blocks.length > 0 && summary.poolIds.length === 0) {
+  if (summary.deltaSource === "derived") {
+    extraVia.push("getblock:chainvalue");
     extraNotes.push(
-      "Blocks were fetched but carry no per-pool valueDelta, so this node cannot show turnstile flow. zcashd-family nodes include it on getblock.",
+      "This node's getblock reports cumulative pool balances but no per-block valueDelta, so the flows shown are derived by differencing consecutive chain totals rather than reported directly. Current zebrad reports the deltas; older builds do not.",
+    );
+  }
+  if (blocks.length > 0 && summary.deltaSource === "none") {
+    extraNotes.push(
+      "Blocks were fetched but carry neither per-pool valueDelta nor cumulative chainValue, so this node cannot show turnstile flow.",
     );
   }
 
   return {
     data: { ...summary, requestedBlocks: heights.length },
-    meta: metaFrom([tip, ...resolved], {
+    meta: metaFrom([tip, ...resolved, { value: null, via: extraVia }], {
       hit: tipResult.hit,
       cachedAt: tipResult.storedAt,
       extraNotes,
@@ -414,6 +448,59 @@ export async function getPrivacy(windowSize?: number): Promise<Envelope<PrivacyD
 
 /* ── upgrades ────────────────────────────────────────────────────────────── */
 
+/**
+ * How far apart blocks are landing near the tip, in seconds.
+ *
+ * This is the only input to the upgrade ETA that is not arithmetic, and it is
+ * worth measuring rather than assuming: Zcash *targets* 75s, but a chain running
+ * hot or cold moves an ETA weeks out by hours.
+ *
+ * Two `getblockheader` calls at the ends of a span give the same figure as
+ * reading every block between them, for a fraction of the payload — an upgrade
+ * ETA has no use for transaction lists or value pools. The span is wide on
+ * purpose: consensus bounds a block's timestamp against median-time-past, not
+ * against its immediate neighbour, so timestamps are only loosely ordered and a
+ * minute of jitter at either end matters far less across 24 blocks than across 2.
+ *
+ * Non-monotonic endpoints are reported as unmeasurable rather than turned into a
+ * negative block time, which would produce an ETA in the past.
+ */
+const BLOCK_TIME_SPAN = 24;
+
+async function measureBlockSpacing(tipHeight: number): Promise<Resolved<number>> {
+  const fromHeight = tipHeight - BLOCK_TIME_SPAN;
+  if (fromHeight < 0) {
+    return { value: null, via: [], note: "The chain is too short to measure block spacing." };
+  }
+
+  const [from, to] = await Promise.all([
+    loadBlockHeader(fromHeight, tipHeight),
+    loadBlockHeader(tipHeight, tipHeight),
+  ]);
+
+  const via = Array.from(new Set([...from.via, ...to.via]));
+  const note = from.note ?? to.note;
+
+  if (typeof from.value?.time !== "number" || typeof to.value?.time !== "number") {
+    return {
+      value: null,
+      via,
+      note: note ?? "Block timestamps were unavailable, so the ETA uses Zcash's 75s target instead of a measured spacing.",
+    };
+  }
+
+  const seconds = (to.value.time - from.value.time) / BLOCK_TIME_SPAN;
+  if (seconds <= 0) {
+    return {
+      value: null,
+      via,
+      note: "Block timestamps across the sampled span were not increasing, so spacing could not be measured.",
+    };
+  }
+
+  return note === undefined ? { value: seconds, via } : { value: seconds, via, note };
+}
+
 export async function getUpgrades(): Promise<Envelope<UpgradeTimeline | null>> {
   const tipResult = await cached("tip", tipTtlMs(), fetchChainTip);
   const tip = tipResult.value;
@@ -425,32 +512,22 @@ export async function getUpgrades(): Promise<Envelope<UpgradeTimeline | null>> {
   const tipHeight = tip.value.height;
   const upgradeMap = tip.value.raw?.upgrades;
 
-  // Reuse the turnstile window's measured block time when it is already cached,
-  // rather than fetching blocks purely to date an ETA.
-  const headers = await cached(`blocktime:${tipHeight}`, slowTtlMs(), async () => {
-    const heights = windowHeights(tipHeight, 12);
-    const blocks = await mapLimit(heights, BLOCK_FETCH_CONCURRENCY, (height) =>
-      loadBlockLite(height, tipHeight),
-    );
-    const times = blocks
-      .map((entry) => entry.value?.time)
-      .filter((time): time is number => typeof time === "number");
-    if (times.length < 2) return null;
-    return (Math.max(...times) - Math.min(...times)) / (times.length - 1);
-  });
+  const spacing = await cached(`blocktime:${tipHeight}`, slowTtlMs(), () =>
+    measureBlockSpacing(tipHeight),
+  );
 
   const timeline = buildUpgradeTimeline({
     height: tipHeight,
     upgrades: upgradeMap,
-    avgBlockSeconds: headers.value,
+    avgBlockSeconds: spacing.value.value,
   });
 
   const extraNotes = timeline.note ? [timeline.note] : [];
 
   return {
     data: timeline,
-    meta: metaFrom([tip], {
-      hit: tipResult.hit && headers.hit,
+    meta: metaFrom([tip, spacing.value], {
+      hit: tipResult.hit && spacing.hit,
       cachedAt: tipResult.storedAt,
       extraNotes,
     }),

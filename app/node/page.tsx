@@ -5,9 +5,11 @@
  *
  * Three things live here that a plain dashboard would not have:
  *
- *  · **The dialect report.** zcashd is deprecated and Zebra implements neither
- *    `getnetworkinfo` nor `getmempoolinfo`, so ZPulse probes the node once and
- *    records what it answers. This table is that probe made visible — the
+ *  · **The capability report.** zcashd is deprecated, so zebrad is the node to
+ *    expect — but zebrad gained `getmempoolinfo`, `getnetworkinfo` and per-pool
+ *    `valueDelta` partway through its life, so which zebrad matters. ZPulse probes
+ *    the node once and records what it answers, separately from reading what
+ *    software it says it is. This table is that probe made visible — the
  *    unsupported rows are the interesting ones, because they are the calls the app
  *    is deliberately routing around rather than crashing on.
  *
@@ -67,7 +69,7 @@ export default function NodePage() {
       <div className="z-page-head">
         <h1>Node</h1>
         <p>
-          Health of the endpoint ZPulse is reading from, which RPC dialect it speaks, how fast each
+          Health of the endpoint ZPulse is reading from, what it implements, how fast each
           method answers, and how much of the traffic the server cache is absorbing.
         </p>
       </div>
@@ -149,13 +151,13 @@ export default function NodePage() {
 
       <div className="z-grid-2">
         <ZCard
-          title="RPC dialect detected"
+          title="RPC surface probed"
           aside={
             capabilities.data ? (
-              <ZBadge tone="accent">{capabilities.data.dialect}</ZBadge>
+              <ZBadge tone="accent">{capabilities.data.implementation}</ZBadge>
             ) : null
           }
-          note="Detected by calling each method once and reading the error. JSON-RPC returns −32601 for a method that does not exist, and any other error proves the method is there — so an unsupported row here is a fact about the node, not a guess."
+          note="Two separate facts. What the node implements is probed by calling each method once and reading the error: JSON-RPC returns −32601 for a method that does not exist, and any other error proves the method is there, so an unsupported row is a fact about the node rather than a guess. Which software it is comes from its own user agent — never inferred from missing methods, because a method Zebra lacked last year it implements today."
         >
           {capabilities.data ? (
             <>
@@ -164,6 +166,16 @@ export default function NodePage() {
                   label="Methods answered"
                   value={`${capabilities.data.supportedCount}/${capabilities.data.totalCount}`}
                   small
+                />
+                <ZStat
+                  label="Reported user agent"
+                  value={capabilities.data.userAgent ?? "—"}
+                  small
+                  sub={
+                    capabilities.data.userAgent
+                      ? "getinfo / getnetworkinfo"
+                      : "no method here reports one"
+                  }
                 />
               </div>
               <div className="z-table-wrap">
@@ -180,7 +192,9 @@ export default function NodePage() {
                       <tr key={entry.key}>
                         <td style={{ fontFamily: "var(--z-mono)", fontSize: 12 }}>
                           {entry.method}
-                          {entry.feature ? <span style={{ color: "var(--z-text-faint)" }}> (feature)</span> : null}
+                          {entry.kind !== "method" ? (
+                            <span style={{ color: "var(--z-text-faint)" }}> ({entry.kind})</span>
+                          ) : null}
                         </td>
                         <td style={{ fontSize: 12 }}>{entry.label}</td>
                         <td className="z-n">

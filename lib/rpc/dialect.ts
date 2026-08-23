@@ -4,8 +4,11 @@
  * Callers ask for "the peer count" or "a block with its transactions" and this
  * module decides which RPC method can answer that on *this* node. It is the
  * direct fix for the bug in the earlier prototype, which called `getnetworkinfo`
- * and `getmempoolinfo` unconditionally and would therefore have failed against
- * zebrad — the node the workshop deck points at, since zcashd is deprecated.
+ * and `getmempoolinfo` unconditionally — fine on zcashd and on a current zebrad,
+ * a hard failure on any zebrad old enough to predate them. Since zcashd is
+ * deprecated and zebrad is what the workshop deck points at, "which zebrad" is
+ * now the axis that matters, and it is not something a version string alone
+ * settles.
  *
  * Every resolver returns the methods it actually used in `via`, which the UI
  * displays. That is deliberate: a grader can see which RPC method produced each
@@ -142,9 +145,12 @@ export async function fetchHeight(): Promise<Resolved<number>> {
 /* ── node identity ───────────────────────────────────────────────────────── */
 
 /**
- * zcashd reports its user agent via getnetworkinfo.subversion; Zebra has no
- * getnetworkinfo and reports it via getinfo.subversion. Try the zcashd path
- * first only if the node actually has it, so a Zebra node costs one call.
+ * A node's user agent string.
+ *
+ * Both zcashd and Zebra implement `getnetworkinfo` and both put the user agent in
+ * `subversion`, so that is tried first. `getinfo` is the fallback: it is
+ * deprecated on zcashd and it is what an older zebrad, which predates
+ * `getnetworkinfo`, answers with.
  */
 export async function fetchNodeVersion(): Promise<Resolved<string>> {
   if (await supports("getnetworkinfo")) {
@@ -249,9 +255,12 @@ export type MempoolSummary = {
 
 /**
  * Three tiers, cheapest-and-richest first:
- *   getmempoolinfo         zcashd — size and bytes in one small call
- *   getrawmempool(true)    Zebra  — verbose map, sum the sizes ourselves
- *   getrawmempool()        any    — txid array, count only
+ *   getmempoolinfo         size and bytes in one small call — zcashd, current zebrad
+ *   getrawmempool(true)    verbose map, sum the sizes ourselves
+ *   getrawmempool()        txid array, count only — the universal floor
+ *
+ * An older zebrad has no getmempoolinfo, which is what makes this a three-tier
+ * resolver rather than one call.
  */
 export async function fetchMempool(): Promise<Resolved<MempoolSummary>> {
   if (await supports("getmempoolinfo")) {
@@ -402,6 +411,15 @@ export async function fetchBlockWithTxs(ref: BlockRef): Promise<Resolved<BlockWi
   };
 }
 
+/**
+ * Height to hash.
+ *
+ * No panel calls this: every panel already has a height and `getblock` accepts
+ * one directly, so resolving to a hash first would be a wasted round trip. It is
+ * here as the typed path for `getblockhash`, which reaches a node only through
+ * the RPC console — by hand, or as the first step of the `tip-to-block` recipe
+ * that demonstrates chaining one call's output into the next.
+ */
 export async function fetchBlockHash(height: number): Promise<Resolved<string>> {
   try {
     return resolved(await rpcCall<string>("getblockhash", [height]), ["getblockhash"]);
@@ -410,14 +428,32 @@ export async function fetchBlockHash(height: number): Promise<Resolved<string>> 
   }
 }
 
+/**
+ * A block header — everything about a block except its transactions.
+ *
+ * Tier 1 is `getblockheader`, which every current zebrad implements and which is
+ * a fraction of a block's payload. Tier 2 is a verbosity-1 `getblock`, a strict
+ * superset of a header: nothing is lost but bandwidth, so a node without
+ * `getblockheader` still gets a timestamp rather than a gap.
+ */
 export async function fetchBlockHeader(ref: BlockRef): Promise<Resolved<BlockHeader>> {
-  try {
-    return resolved(await rpcCall<BlockHeader>("getblockheader", [refToParam(ref), true]), [
-      "getblockheader",
-    ]);
-  } catch (err) {
-    return unavailable(describeRpcError(err), ["getblockheader"]);
+  if (await supports("getblockheader")) {
+    try {
+      return resolved(await rpcCall<BlockHeader>("getblockheader", [refToParam(ref), true]), [
+        "getblockheader",
+      ]);
+    } catch (err) {
+      return unavailable(describeRpcError(err), ["getblockheader"]);
+    }
   }
+
+  const block = await fetchBlockLite(ref);
+  if (!block.value) return unavailable(block.note ?? "Block unavailable.", block.via);
+  return {
+    value: block.value,
+    via: block.via,
+    note: "getblockheader unsupported — read a whole block to get its timestamp.",
+  };
 }
 
 /* ── shielded state and issuance ─────────────────────────────────────────── */

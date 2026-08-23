@@ -51,12 +51,16 @@ because the same one number at six times the request cost is not a better ticker
 
 ### `/node` — the endpoint
 
-- **The dialect report.** zcashd and Zebra implement different method sets. ZPulse probes the node
-  once and records what it answered; this table is that probe made visible. The `unsupported` rows
-  are the interesting ones — they are the calls the app is deliberately routing around.
+- **The RPC surface, probed.** zcashd is deprecated, so the interesting question is no longer
+  *which implementation* but *which zebrad* — `getmempoolinfo`, `getnetworkinfo` and per-pool
+  `valueDelta` all arrived partway through Zebra's life. ZPulse probes the node once and records what
+  it answered; this table is that probe made visible. Any `unsupported` row is a call the app is
+  routing around. The node's **identity** is a separate fact, read from its own user agent — never
+  inferred from which methods are missing, because a method Zebra lacked last year it implements
+  today.
 - **Per-method latency**, measured inside the transport on every real call, with a sparkline per
   method. This is how you tell a slow provider from a slow app.
-- **Request budget.** Cache hit rate, upstream calls, coalesced reads. On screen because it is a
+- **Request budget.** Cache hits, misses, hit rate and live entry count. On screen because it is a
   load-bearing claim, not an implementation detail — see [Surviving a request quota](#surviving-a-request-quota).
 - **Alerts and history.** Peer count, stall detection and sync thresholds, plus sparklines from the
   poller's recorded time series.
@@ -69,38 +73,34 @@ next to the node's reply and the round-trip latency. Plus chained recipes
 previous result — the same pattern the panels use internally.
 
 The form is built from the server's own allowlist, fetched at runtime rather than duplicated in the
-client, so it cannot drift. Methods the node does not implement are **marked, not hidden**: running
-`getmempoolinfo` against Zebra and seeing the −32601 come back is the clearest possible demonstration
-of why the dialect layer exists.
+client, so it cannot drift. Methods the node does not implement are **marked, not hidden** — that is
+what the `version-tell` recipe is for: watching `getmempoolinfo` come back −32601 dates the node
+you're pointed at, and is the clearest possible demonstration of why the dialect layer exists. Try it
+against `ZPULSE_DEMO_PROFILE=zebra-legacy` if your own node is too new to fail.
 
 ---
 
 ## RPC methods
 
-16 methods, against a requirement of 3. Each one is here because something on screen needs it.
-(`getblock` appears twice below because its two verbosity modes feed two different panels.)
+The challenge asks for **at least 3–5**. That is a floor, not a cap, and ZPulse reads 16 — so the
+honest question is which of them are load-bearing and which are there for their own sake. The answer:
+**five carry the panels, eleven exist because the sixteenth thing this app is about is what happens
+when a node doesn't have a method.**
 
-| Method                    | What ZPulse uses it for                                                                                              |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `getblockchaininfo`       | The workhorse. Tip, chain, difficulty, sync progress, **`valuePools`**, `upgrades`, `consensus`.                     |
-| `getblock` (verbosity 1)  | Per-block `valueDelta` for each pool — the turnstile chart.                                                          |
-| `getblock` (verbosity 2)  | Inline transaction objects — the privacy mix.                                                                        |
-| `getblockcount`           | The landing-page ticker: the cheapest live signal there is.                                                          |
-| `getbestblockhash`        | Tip identity when `getblockchaininfo` doesn't carry it.                                                              |
-| `getblockhash`            | Height → hash when walking a window of blocks.                                                                       |
-| `getblockheader`          | Timestamps, for measured average block time and the upgrade ETA.                                                     |
-| `z_gettreestate`          | Per-pool commitment tree roots — the shielded-state fingerprint, shown as independent evidence next to the balances. |
-| `getblocksubsidy`         | Issuance split including the lockbox stream; cross-checks ZPulse's own ZIP-208 model.                                |
-| `getrawtransaction`       | Privacy-mix fallback where `getblock` verbosity 2 is unavailable.                                                    |
-| `getrawmempool` (verbose) | Mempool size and bytes — the Zebra-compatible path.                                                                  |
-| `getmempoolinfo`          | The zcashd fast path when the node has it. Expect `unsupported` on Zebra.                                            |
-| `getpeerinfo`             | Peer count, inbound/outbound split, best peer height.                                                                |
-| `getnetworkinfo`          | Version and connection count on zcashd. Expect `unsupported` on Zebra.                                               |
-| `getnetworksolps`         | Network hashrate.                                                                                                    |
-| `getmininginfo`           | Hashrate fallback when `getnetworksolps` is unavailable.                                                             |
-| `getinfo`                 | Node version — the one field both dialects agree on.                                                                 |
+### The five that carry the panels
 
-Two methods that carry more weight than the rest:
+| Method                   | What ZPulse uses it for                                                                                              |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `getblockchaininfo`      | The workhorse. Tip, chain, difficulty, sync progress, **`valuePools`**, `upgrades`, `consensus`.                      |
+| `getblock` (verbosity 1) | Per-block `valueDelta` for each pool — the turnstile chart.                                                          |
+| `getblock` (verbosity 2) | Inline transaction objects — the privacy mix.                                                                        |
+| `z_gettreestate`         | Per-pool commitment tree roots — the shielded-state fingerprint, shown as independent evidence next to the balances. |
+| `getblocksubsidy`        | Issuance split including the lockbox stream; cross-checks ZPulse's own ZIP-208 model.                                 |
+
+Take those five away and there is no app. `getblock` counts twice because its two verbosity modes
+return genuinely different payloads and feed different panels.
+
+Two of them carry more weight than the rest:
 
 **`getblock` is why this app fits in a free tier.** Verbosity ≥1 returns a `valuePools` array with a
 `valueDelta` per pool, and verbosity 2 returns full transactions inline. So the turnstile chart and
@@ -110,6 +110,33 @@ is immutable, it caches by hash forever.
 **`getblockchaininfo` is read for fields most explorers ignore.** `valuePools` is the supply panel.
 `upgrades` is the timeline. Both are already in a response that has to be fetched anyway.
 
+### The eleven that make the first five survive a real node
+
+| Method                    | Role                        | What it's for                                                                                          |
+| ------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `getblockcount`           | cheapest signal             | The landing-page ticker, and the tip fallback when `getblockchaininfo` is unavailable.                  |
+| `getbestblockhash`        | tip fallback                | Tip identity when `getblockchaininfo` doesn't carry it.                                                 |
+| `getblockheader`          | primary                     | Two calls at the ends of a 24-block span give measured average block time and the upgrade ETA.          |
+| `getrawtransaction`       | fallback for `getblock` v2  | The privacy mix where verbosity 2 is unsupported — costs 1+N calls per block, and the panel says so.    |
+| `getmempoolinfo`          | primary                     | Mempool size and bytes in one call. Absent on a zebrad old enough to predate it.                        |
+| `getrawmempool` (verbose) | fallback for the above      | Sum the entry sizes client-side. `getrawmempool()` bare is the floor: a txid count, no byte total.      |
+| `getpeerinfo`             | primary                     | Peer count, inbound/outbound split, best peer height.                                                   |
+| `getnetworkinfo`          | primary                     | Node user agent and connection count. Also absent on an older zebrad.                                   |
+| `getinfo`                 | fallback for the above      | Version and build. Deprecated on zcashd, and the only version read an older zebrad answers.             |
+| `getnetworksolps`         | primary                     | Network hashrate.                                                                                       |
+| `getmininginfo`           | fallback for the above      | Hashrate when `getnetworksolps` is unavailable.                                                          |
+
+Five **primary / fallback pairs** in that table, and each pair is one dialect resolver in
+`lib/rpc/dialect.ts`. That is the point of the count: a fallback you never call is a fallback you
+never tested, and `/node` renders the probe that decides which side of each pair runs. Reducing this
+to five methods would mean deleting the layer the `/node` page exists to show.
+
+One honest exception. **`getblockhash`** is on the allowlist but no panel calls it — every panel
+already has a height, and `getblock` accepts a height directly, so resolving to a hash first would be
+a wasted round trip. It reaches a node only through the console, by hand or as the first step of the
+`tip-to-block` recipe that demonstrates chaining one call's output into the next. Labelled here rather
+than quietly counted.
+
 ### Methods that are _not_ reachable
 
 `/api/rpc` validates against a fixed allowlist of the read-only methods above. `stop`,
@@ -118,14 +145,25 @@ method are unreachable **by construction** — the console cannot name a method 
 table, so there is no denylist to keep up to date. There is also a drift check asserting the
 allowlist and the capability-probe table describe the same method set.
 
-`.env.local.example` documents all 18 variables the code reads, and nothing it doesn't. You need
+---
+
+## Pointing it at a node
+
+`.env.local.example` documents all 20 variables the code reads, and nothing it doesn't. You need
 one: `ZCASH_RPC_URL`.
 
 ### Option A — demo mode (no endpoint)
 
-Leave `ZCASH_RPC_URL` blank. Every page renders from a deterministic synthetic node that emulates a
-Zebra-flavoured endpoint _including its dialect gaps_, so the capability table and the −32601 demo
-both work.
+Leave `ZCASH_RPC_URL` blank. Every page renders from a deterministic synthetic node that emulates
+zebrad — and it emulates two ages of it, because that is the axis that matters:
+
+```
+ZPULSE_DEMO_PROFILE=zebra          # default: a current node, every method answers
+ZPULSE_DEMO_PROFILE=zebra-legacy   # an older node: -32601s and no valueDelta
+```
+
+`zebra-legacy` is what makes the capability table, the −32601 demo and the turnstile's derived tier
+explorable with no node at all. Response shapes and block cadence are real; the chain is not.
 
 Demo mode is badged in amber on every page, and it is **never** a fallback for a failed live call. If
 you point ZPulse at a broken node it shows you a broken node. An unbadged demo would be a lie about a
@@ -148,23 +186,47 @@ Nothing else to set. ZPulse sends no `Authorization` header when user and passwo
 
 ### Option C — local zebrad
 
-Zebra's RPC port has no auth. Enable it in `~/.config/zebrad.toml`:
+Enable the RPC port in `~/.config/zebrad.toml`:
 
 ```toml
 [rpc]
 listen_addr = "127.0.0.1:8232"
 ```
 
+**Zebra 2.x sets `enable_cookie_auth = true` by default**, so that alone gets you HTTP 401 — this is
+the single likeliest way pointing ZPulse at a real node fails, and the error message says so rather
+than sending you looking for an `rpcuser` you never had to set. Two ways past it. Either point ZPulse
+at the cookie:
+
 ```
 ZCASH_RPC_URL=http://127.0.0.1:8232
+ZCASH_RPC_COOKIE_FILE=$HOME/.cache/zebra/.cookie
 ```
+
+The file holds one `__cookie__:<secret>` line and is sent as HTTP basic auth exactly as written.
+Zebra rewrites the secret on every restart, so ZPulse re-reads the file whenever its mtime changes —
+restarting your node does not mean restarting the app. Or turn cookie auth off, which is reasonable on
+a port already bound to localhost:
+
+```toml
+[rpc]
+listen_addr = "127.0.0.1:8232"
+enable_cookie_auth = false
+```
+
+> The cookie path is verified against Zebra's config source and covered by tests that assert the exact
+> `Authorization: Basic` header ZPulse sends, that credentials never appear in an error message, and
+> that an unreadable cookie file fails loudly instead of silently sending nothing. What is **not**
+> verified here is a live handshake — I had no zebrad to test against. If it misbehaves, that is the
+> first place to look.
 
 A syncing node is fine — the sync percentage and the "not at tip" state are part of what `/node`
 shows. Pool balances need the sync to have passed the heights you're looking at.
 
-### Option D — local zcashd
+### Option D — local zcashd (legacy)
 
-Basic auth, from your `zcash.conf`:
+zcashd is deprecated and ZPulse is built for zebrad, but nothing here refuses it: the dialect layer
+routes by what a node answers, not by what it is called. Basic auth, from your `zcash.conf`:
 
 ```
 ZCASH_RPC_URL=http://127.0.0.1:8232
@@ -187,9 +249,11 @@ verbosities — and prints `ok` / `unsupported` / `error` with a latency each, f
 hashes from earlier results so nothing is hardcoded to a chain. If this prints latencies, your endpoint is fine and anything still
 broken afterwards is ZPulse's fault.
 
-**Expect some `unsupported` lines.** On Zebra, `getmempoolinfo` and `getnetworkinfo` will fail with
-−32601, and routing around that is the dialect layer's entire job. Either result is a pass; the script
-only exits non-zero if _nothing_ answered.
+**Against a current zebrad, expect no `unsupported` lines at all** — modern Zebra implements every
+method ZPulse reads, including `getmempoolinfo` and `getnetworkinfo`. Older builds answer −32601 for
+those two, and routing around that is the dialect layer's job. Either result is a pass; the script only
+exits non-zero if _nothing_ answered. Which lines you get is itself the useful output: it dates the
+node.
 
 It writes the real response shapes to `lib/rpc/fixtures/recorded/` (gitignored) so you have them for
 reference without committing anything about your endpoint.
@@ -233,11 +297,18 @@ npm run build
 npm run verify
 ```
 
-`verify` is a headless suite over the pure analysis, the cache, the console allowlist, the store and
-the route handlers — including a pass that points the app at a dead host and asserts the five
-node-backed GET routes each return a `degraded` envelope, never demo data, and never a URL that could
-carry a token. It runs the TypeScript directly via Node's native type-stripping, so it needs
-**Node 22.18+ or 24**. The app itself only needs Node 18.17.
+134 assertions over the pure analysis, the cache, the console allowlist, the store and the route
+handlers. Three passes are worth naming:
+
+- The whole data layer runs twice, once against each demo profile, so **every dialect fallback is
+  exercised** rather than only the happy path — and the derived turnstile is checked against the
+  reported one for agreement to under a zatoshi.
+- A pass points the app at a dead host and asserts the five node-backed GET routes each return a
+  `degraded` envelope, never demo data, and never a URL that could carry a token.
+- Cookie auth is checked by stubbing `fetch` and inspecting the header ZPulse was about to send.
+
+It runs the TypeScript directly via Node's native type-stripping, so it needs **Node 22.18+ or 24**.
+The app itself only needs Node 18.17.
 
 ---
 
@@ -255,10 +326,11 @@ can open doesn't exhaust a daily budget.
 
 On top of the TTLs, identical concurrent reads are **coalesced**: ten open browser tabs and one tab
 cost the node the same, because the second caller through the door awaits the first one's in-flight
-promise instead of opening its own. Steady-state usage lands in the low thousands of requests per day.
+promise instead of opening its own. A coalesced ride counts as a cache hit, not as its own statistic —
+`/node` reports hits, misses, hit rate and live entry count, and nothing it does not actually count.
+Steady-state usage lands in the low thousands of requests per day.
 
-The cache hit rate is displayed on `/node` so the claim is checkable rather than asserted. To watch it
-work:
+The hit rate is on `/node` so the claim is checkable rather than asserted. To watch it work:
 
 ```bash
 curl -s localhost:3000/api/chain | head -c 400
@@ -281,11 +353,11 @@ app/
   globals.css                 the whole design system
   api/                        11 route handlers, all { data, meta } envelopes
 lib/
-  rpc/client.ts               transport: both auth modes, timeout, retry, structured errors
-  rpc/capabilities.ts         probe once, cache; −32601 ⇒ unsupported
+  rpc/client.ts               transport: basic + cookie auth, timeout, retry, structured errors
+  rpc/capabilities.ts         probe once, cache; method / argument / field-shape probes
   rpc/dialect.ts              data need → best method this particular node has
   rpc/console.ts              the allowlist and its param validation
-  rpc/demo.ts                 the synthetic node
+  rpc/demo.ts                 the synthetic node, at two zebrad ages
   rpc/telemetry.ts            per-method latency, recorded in the transport
   cache.ts                    TTL + height-keyed + in-flight coalescing
   analysis/                   supply · turnstile · privacy · upgrades · format (pure functions)
@@ -304,8 +376,14 @@ these figures_ into _here is how to check them_.
 
 **Capability detection reads errors, not documentation.** JSON-RPC returns −32601 for a method that
 doesn't exist, and _any other error proves the method is there_ — a parameter complaint is a
-successful existence probe. So the dialect report is a fact about the node in front of you, not a
-guess from its version string.
+successful existence probe. So the surface report is a fact about the node in front of you, not a guess
+from its version string.
+
+**And identity is read, not deduced.** An earlier version of this code inferred "Zebra" from the
+_absence_ of `getmempoolinfo`. Current Zebra implements it, so that inference labelled every modern
+zebrad as zcashd — confidently, in a table whose whole job is to be trustworthy. Which software a node
+is now comes from its own `subversion` string; what it implements comes from the probes. Two facts, two
+sources, never one standing in for the other.
 
 **The store is behind an interface.** JSONL append-only today, so a torn final line costs one row
 rather than the file; swappable for Postgres without touching the routes. On a read-only filesystem it
@@ -323,6 +401,12 @@ falls back to memory and reports itself as non-durable on `/node` instead of pre
   what the query string asks for, so no URL can make ZPulse walk the chain.
 - **`getblock` verbosity 2 isn't universal.** Where it's missing, the privacy mix falls back to
   verbosity 1 plus `getrawtransaction`, and the panel says so.
+- **Per-pool `valueDelta` isn't universal either.** An older zebrad returns pool totals without
+  per-block deltas, so the turnstile derives them by differencing consecutive `chainValue` totals and
+  labels the chart `derived` instead of `reported`. It is exact rather than approximate — `chainValueZat`
+  is an integer near 1e14, well inside the range a float represents exactly — and a test asserts the
+  derived flows match the reported ones to under one zatoshi. A derived chart is not a fabricated one,
+  but you are entitled to know which you're looking at.
 - **Latency stats and the cache live in process memory**, so they reset on restart and are per-instance
   on a multi-instance deploy. The JSONL history is the part that persists.
 

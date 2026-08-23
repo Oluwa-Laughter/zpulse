@@ -144,14 +144,14 @@ export const CONSOLE_METHODS: ConsoleMethod[] = [
     method: "getrawmempool",
     capabilityKey: "getrawmempool",
     summary: "Mempool contents. Verbose adds per-transaction size and fee.",
-    usedFor: "Mempool size on Zebra, which does not implement getmempoolinfo.",
+    usedFor: "The mempool fallback: on an older zebrad without getmempoolinfo, size and bytes are summed from this instead.",
     params: [{ name: "verbose", kind: "bool", default: false, hint: "true returns an object with sizes" }],
   },
   {
     method: "getmempoolinfo",
     capabilityKey: "getmempoolinfo",
-    summary: "Mempool size and bytes in one call. zcashd only.",
-    usedFor: "The fast mempool path when the node has it. Expect this to be unsupported on Zebra.",
+    summary: "Mempool size and bytes in one call.",
+    usedFor: "The one-call mempool path. Current zebrad implements it; an older one answers -32601 and ZPulse sums getrawmempool instead.",
     params: [],
   },
   {
@@ -164,8 +164,8 @@ export const CONSOLE_METHODS: ConsoleMethod[] = [
   {
     method: "getnetworkinfo",
     capabilityKey: "getnetworkinfo",
-    summary: "Connection count and node subversion. zcashd only.",
-    usedFor: "Version and peer count when present. Expect this to be unsupported on Zebra.",
+    summary: "Connection count and node subversion.",
+    usedFor: "The preferred version read. Current zebrad implements it; an older one answers -32601 and ZPulse falls back to getinfo.",
     params: [],
   },
   {
@@ -188,8 +188,8 @@ export const CONSOLE_METHODS: ConsoleMethod[] = [
   {
     method: "getinfo",
     capabilityKey: "getinfo",
-    summary: "Node version and build. Deprecated on zcashd but present on both dialects.",
-    usedFor: "Node version, which is the one field both dialects agree on.",
+    summary: "Node version and build.",
+    usedFor: "Identifying the node. Its subversion string is what the /node page classifies the implementation by — read from the node, never guessed from which methods are missing.",
     params: [],
   },
 ];
@@ -231,7 +231,7 @@ function validateOne(spec: ParamSpec, raw: unknown, method: string): unknown {
     case "block-id": {
       // Nodes accept a height as a string here, and a hash as a string. Numbers
       // are stringified rather than rejected, because a height is what a user
-      // will type and both dialects want it quoted.
+      // will type, and a node wants it quoted.
       const value = typeof raw === "number" ? String(Math.floor(raw)) : raw;
       if (typeof value !== "string" || value.trim() === "") {
         throw new ConsoleRejectedError(`"${spec.name}" must be a height or a block hash.`, method);

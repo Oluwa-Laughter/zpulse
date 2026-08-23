@@ -166,10 +166,10 @@ export function ZDemoBanner({ meta }: { meta?: Meta | null }) {
   if (!meta || meta.mode !== "demo") return null;
   return (
     <div className="z-banner">
-      <strong>Demo mode.</strong> These figures come from a built-in fixture node that emulates a
-      Zebra-flavoured RPC endpoint — the shapes, the dialect gaps and the block cadence are real, the
-      chain is not. Set <code>ZCASH_RPC_URL</code> in <code>.env.local</code> to point ZPulse at a
-      real node.
+      <strong>Demo mode.</strong> These figures come from a built-in fixture node that emulates
+      zebrad — the response shapes, the version differences between zebrad releases and the block
+      cadence are real, the chain is not. Set <code>ZCASH_RPC_URL</code> in <code>.env.local</code>{" "}
+      to point ZPulse at a real node.
     </div>
   );
 }

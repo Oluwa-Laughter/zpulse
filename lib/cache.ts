@@ -94,18 +94,6 @@ export async function cached<T>(
   return { value, hit: false, storedAt: store.get(key)?.storedAt ?? Date.now() };
 }
 
-/** Drop every key starting with `prefix`. Used when the tip advances. */
-export function invalidatePrefix(prefix: string): number {
-  let dropped = 0;
-  for (const key of Array.from(store.keys())) {
-    if (key.startsWith(prefix)) {
-      store.delete(key);
-      dropped += 1;
-    }
-  }
-  return dropped;
-}
-
 export function cacheStats(): { entries: number; hits: number; misses: number; hitRate: number } {
   const total = hits + misses;
   return {

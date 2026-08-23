@@ -12,11 +12,23 @@
  *     call — a broken node must look broken, not look live. Every response is
  *     tagged `source: "demo"` and the UI badges it.
  *
- *  2. The synthetic node deliberately emulates **zebrad**, not zcashd: it
- *     answers `getrawmempool`/`getpeerinfo`/`getinfo` and returns -32601 for
- *     `getnetworkinfo`/`getmempoolinfo`. That means the dialect layer's
- *     fallbacks are exercised on every demo run instead of being discovered
- *     for the first time against a real endpoint.
+ *  2. The synthetic node emulates **zebrad**, not zcashd, because zcashd is
+ *     deprecated. But "zebrad" is not one target: `getmempoolinfo`,
+ *     `getnetworkinfo` and per-pool `valueDelta` on `getblock` all arrived
+ *     partway through Zebra's life. So there are two profiles, selected with
+ *     `ZPULSE_DEMO_PROFILE`:
+ *
+ *       zebra         (default) a current zebrad. Answers every method ZPulse
+ *                     uses, and `getblock` carries both cumulative pool balances
+ *                     and per-block deltas.
+ *       zebra-legacy  an older zebrad. `getmempoolinfo` and `getnetworkinfo`
+ *                     return -32601, and `getblock` carries balances but no
+ *                     deltas — so the turnstile has to derive them by
+ *                     differencing consecutive totals.
+ *
+ *     The legacy profile is the useful one for review: it exercises every
+ *     fallback in the dialect layer and the turnstile's derived tier, instead of
+ *     leaving them to be discovered for the first time against a real endpoint.
  *
  * Values are deterministic functions of block height, so charts are stable
  * across restarts, and the tip advances on a ~75s cadence off a fixed epoch
@@ -31,6 +43,8 @@ import type {
   BlockHeader,
   BlockSubsidy,
   BlockchainInfo,
+  MempoolInfo,
+  NetworkInfo,
   NodeInfo,
   PeerInfo,
   RawTransaction,
@@ -38,6 +52,20 @@ import type {
   ValuePool,
   VerboseMempool,
 } from "./types";
+
+/** Which zebrad the synthetic node is pretending to be. */
+export type DemoProfile = "zebra" | "zebra-legacy";
+
+/**
+ * Read per call rather than at module load, so a test — or an editor of
+ * .env.local during `next dev` — can switch profiles without a restart.
+ * Anything unrecognised means the modern profile, since that is the node a
+ * reader following the README will actually have.
+ */
+export function demoProfile(): DemoProfile {
+  const raw = process.env.ZPULSE_DEMO_PROFILE?.trim().toLowerCase();
+  return raw === "zebra-legacy" || raw === "legacy" ? "zebra-legacy" : "zebra";
+}
 
 /** Anchor for the synthetic chain. Fixed, so height is stable across restarts. */
 const DEMO_EPOCH_MS = Date.UTC(2026, 7, 22, 0, 0, 0);
@@ -67,13 +95,30 @@ function demoBlockTime(height: number, nowMs: number = Date.now()): number {
 
 /* ── deterministic pseudo-randomness ─────────────────────────────────────── */
 
-/** FNV-1a. Small, dependency-free, good enough to make synthetic data look organic. */
+/**
+ * FNV-1a, then MurmurHash3's fmix32 finalizer.
+ *
+ * The finalizer is not decoration. FNV-1a alone has weak output avalanche, and
+ * every seed here ends in a block height, so consecutive heights differ in only
+ * the low bits of the digest — `rand()` becomes a near-smooth ramp instead of
+ * noise. Measured over 460,752 heights, bare FNV-1a gave lag-1 correlation
+ * **0.8796**, an all-flat run of **90** consecutive blocks with no pool movement,
+ * and **8.26%** of 16-block windows entirely flat. That is enough to make a
+ * turnstile window land on a stretch where nothing moves, so what the demo shows
+ * depended on the wall-clock date. With fmix32: correlation **-0.0036**, longest
+ * flat run **10**, and **zero** entirely-flat windows.
+ */
 function hash32(seed: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < seed.length; i++) {
     h ^= seed.charCodeAt(i);
     h = Math.imul(h, 0x01000193) >>> 0;
   }
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b) >>> 0;
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35) >>> 0;
+  h ^= h >>> 16;
   return h >>> 0;
 }
 
@@ -136,24 +181,66 @@ function poolDeltas(height: number): Record<string, number> {
 }
 
 /**
- * Cumulative balances at a height, by summing deltas forward from the base.
+ * Cumulative balances at a height, summed forward from a **fixed** anchor at
+ * DEMO_BASE_HEIGHT.
  *
- * The walk is clamped to a fixed window: this runs per request, and the demo
- * tip advances with wall-clock time, so an unclamped loop would get slower
- * every day the file sits here. Synthetic balances drifting slightly from a
- * true running total costs nothing.
+ * The anchor being fixed is load-bearing, not a style choice. The `zebra-legacy`
+ * profile omits per-block `valueDelta`, so lib/analysis/turnstile.ts recovers
+ * flows by differencing consecutive `chainValue` totals — which only reproduces
+ * `poolDeltas(h)` if `balances(h) - balances(h-1)` telescopes exactly. An earlier
+ * version of this function walked a moving 20,000-block window, making that
+ * difference `poolDeltas(h) - poolDeltas(h - 20001)`: the orchard-drain /
+ * ironwood-fill signal would have cancelled against unrelated noise from 20,000
+ * blocks earlier, and the derived tier would have looked implemented while
+ * producing nonsense.
+ *
+ * A fixed anchor under an ever-advancing tip is an unbounded walk, so prefix sums
+ * are memoised every CHECKPOINT_STRIDE heights. Per-call work is then at most one
+ * stride regardless of how long this file has sat here. The stride is a
+ * straight trade: smaller means more memoised rows and less walking, and since
+ * demoBlock() now needs balances per block, the walking is what a turnstile
+ * window pays 60 times over.
  */
-const DEMO_BALANCE_WALK_LIMIT = 20_000;
+const CHECKPOINT_STRIDE = 256;
+
+const checkpointBalances = new Map<number, Record<string, number>>([
+  [DEMO_BASE_HEIGHT, { ...DEMO_POOL_BASE }],
+]);
+
+function addDeltas(into: Record<string, number>, height: number): void {
+  for (const [id, delta] of Object.entries(poolDeltas(height))) {
+    into[id] = (into[id] ?? 0) + delta;
+  }
+}
+
+/** Exact prefix sums at the nearest checkpoint at or below `height`. */
+function checkpointAtOrBelow(height: number): { height: number; balances: Record<string, number> } {
+  const target =
+    DEMO_BASE_HEIGHT +
+    Math.floor((height - DEMO_BASE_HEIGHT) / CHECKPOINT_STRIDE) * CHECKPOINT_STRIDE;
+
+  const cached = checkpointBalances.get(target);
+  if (cached) return { height: target, balances: cached };
+
+  // Walk down to the nearest checkpoint already computed, then forward from
+  // there, storing each one on the way so no later height repeats the work.
+  let from = target;
+  while (from > DEMO_BASE_HEIGHT && !checkpointBalances.has(from)) from -= CHECKPOINT_STRIDE;
+
+  const running = { ...(checkpointBalances.get(from) ?? DEMO_POOL_BASE) };
+  for (let cursor = from; cursor < target; cursor += CHECKPOINT_STRIDE) {
+    for (let h = cursor + 1; h <= cursor + CHECKPOINT_STRIDE; h++) addDeltas(running, h);
+    checkpointBalances.set(cursor + CHECKPOINT_STRIDE, { ...running });
+  }
+  return { height: target, balances: running };
+}
 
 function poolBalances(height: number): Record<string, number> {
-  const balances: Record<string, number> = { ...DEMO_POOL_BASE };
-  const from = Math.max(DEMO_BASE_HEIGHT + 1, height - DEMO_BALANCE_WALK_LIMIT);
-  for (let h = from; h <= height; h++) {
-    const deltas = poolDeltas(h);
-    for (const [id, delta] of Object.entries(deltas)) {
-      balances[id] = (balances[id] ?? 0) + delta;
-    }
-  }
+  if (height <= DEMO_BASE_HEIGHT) return { ...DEMO_POOL_BASE };
+
+  const anchor = checkpointAtOrBelow(height);
+  const balances = { ...anchor.balances };
+  for (let h = anchor.height + 1; h <= height; h++) addDeltas(balances, h);
   return balances;
 }
 
@@ -311,14 +398,27 @@ function demoBlock(height: number, verbosity: number): Block | string {
 
   const txs = blockTxs(height);
   const deltas = poolDeltas(height);
+  const balances = poolBalances(height);
+
+  // Current zebrad's getblock v1 carries both the cumulative balance and the
+  // per-block delta for every pool. An older one carries only the balance, and
+  // that single missing field is the whole version-skew axis: it is what forces
+  // the turnstile onto its derived tier.
+  const reportDeltas = demoProfile() === "zebra";
   const valuePools: ValuePool[] = Object.keys(DEMO_POOL_BASE).map((id) => {
-    const delta = deltas[id] ?? 0;
-    return {
+    const total = balances[id] ?? 0;
+    const pool: ValuePool = {
       id,
       monitored: true,
-      valueDelta: Number(delta.toFixed(8)),
-      valueDeltaZat: Math.round(delta * 1e8),
+      chainValue: Number(total.toFixed(8)),
+      chainValueZat: Math.round(total * 1e8),
     };
+    if (reportDeltas) {
+      const delta = deltas[id] ?? 0;
+      pool.valueDelta = Number(delta.toFixed(8));
+      pool.valueDeltaZat = Math.round(delta * 1e8);
+    }
+    return pool;
   });
 
   const tip = demoTipHeight();
@@ -422,6 +522,30 @@ function demoNodeInfo(): NodeInfo {
   };
 }
 
+/**
+ * The `zebra` profile answers this; `zebra-legacy` does not. Note that the
+ * subversion string is what lib/rpc/capabilities.ts classifies the node by, so it
+ * has to agree with demoNodeInfo() — an endpoint that identifies as two different
+ * pieces of software depending on which method you ask is not a node any code
+ * should be written against.
+ */
+function demoNetworkInfo(): NetworkInfo {
+  return {
+    version: 2_004_001,
+    subversion: "/Zebra:2.4.1/",
+    protocolversion: 170_120,
+    connections: demoPeers().length,
+  };
+}
+
+/** Derived from the same synthetic mempool getrawmempool returns, so the two agree. */
+function demoMempoolInfo(): MempoolInfo {
+  const mempool = demoMempool();
+  const entries = Object.values(mempool);
+  const bytes = entries.reduce((sum, entry) => sum + (entry.size ?? 0), 0);
+  return { size: entries.length, bytes, usage: Math.round(bytes * 1.6) };
+}
+
 function demoBlockHeader(height: number): BlockHeader {
   return {
     hash: blockHash(height),
@@ -446,11 +570,14 @@ function resolveHeight(param: unknown): number {
 /**
  * The synthetic node's dispatch table.
  *
- * Methods absent from this switch throw RpcUnsupportedError, which is exactly
- * what a real node returns as JSON-RPC -32601 — including `getnetworkinfo` and
- * `getmempoolinfo`, on purpose, because zebrad does not implement them.
+ * Which methods answer depends on the profile: `demoSupportedMethods()` is
+ * consulted first, so a method implemented below still returns -32601 under a
+ * profile that predates it. That single gate is what keeps the two profiles from
+ * drifting apart from the list the capability probe reads.
  */
 export function getDemoResult(method: string, params: unknown[] = []): unknown {
+  if (!demoSupportedMethods().includes(method)) throw new RpcUnsupportedError(method);
+
   switch (method) {
     case "getblockchaininfo":
       return demoBlockchainInfo();
@@ -524,15 +651,23 @@ export function getDemoResult(method: string, params: unknown[] = []): unknown {
     case "getinfo":
       return demoNodeInfo();
 
-    // Deliberately unimplemented, matching zebrad:
-    //   getnetworkinfo, getmempoolinfo
+    case "getnetworkinfo":
+      return demoNetworkInfo();
+
+    case "getmempoolinfo":
+      return demoMempoolInfo();
+
     default:
       throw new RpcUnsupportedError(method);
   }
 }
 
-/** Methods the synthetic node answers. Used by the capability probe in demo mode. */
-export const DEMO_SUPPORTED_METHODS = [
+/**
+ * Methods the synthetic node answers, per profile. Read by the capability probe
+ * in demo mode and enforced by getDemoResult, so the probe's answer and the
+ * node's behaviour cannot disagree.
+ */
+const DEMO_METHODS_COMMON = [
   "getblockchaininfo",
   "getblockcount",
   "getbestblockhash",
@@ -548,3 +683,12 @@ export const DEMO_SUPPORTED_METHODS = [
   "getmininginfo",
   "getinfo",
 ] as const;
+
+/** Added to Zebra partway through its life, hence absent from `zebra-legacy`. */
+const DEMO_METHODS_MODERN = ["getnetworkinfo", "getmempoolinfo"] as const;
+
+export function demoSupportedMethods(): readonly string[] {
+  return demoProfile() === "zebra"
+    ? [...DEMO_METHODS_COMMON, ...DEMO_METHODS_MODERN]
+    : DEMO_METHODS_COMMON;
+}

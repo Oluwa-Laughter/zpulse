@@ -14,8 +14,8 @@
  *    this page exists to support is that ZPulse speaks JSON-RPC to a node. Showing
  *    `{jsonrpc, id, method, params}` next to the reply is the evidence.
  *
- *  · **Methods the node does not implement are marked, not hidden.** On a Zebra
- *    node `getmempoolinfo` is a −32601, and being able to run it and see that is
+ *  · **Methods the node does not implement are marked, not hidden.** On an older
+ *    zebrad `getmempoolinfo` is a −32601, and being able to run it and see that is
  *    the clearest demonstration of why the dialect layer exists.
  *
  * `$prev` substitution for the chained recipes happens here, one step at a time,
@@ -98,12 +98,13 @@ export default function RpcPage() {
 
   const spec = methods.find((entry) => entry.method === selected) ?? null;
 
-  // Feature probes share a method name with a plain probe (getblock at verbosity 2),
-  // so only the plain entries decide whether a method itself exists.
+  // Feature and shape probes share a method name with a plain probe (getblock at
+  // verbosity 2, getblock's valueDelta field), so only the plain method-existence
+  // entries decide whether a method itself exists.
   const unsupported = useMemo(() => {
     const set = new Set<string>();
     for (const entry of catalogue.data?.capabilities.entries ?? []) {
-      if (!entry.feature && !entry.supported) set.add(entry.method);
+      if (entry.kind === "method" && !entry.supported) set.add(entry.method);
     }
     return set;
   }, [catalogue.data]);

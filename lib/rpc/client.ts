@@ -15,7 +15,9 @@
  * the demo-mode branch.
  */
 
-import { DEMO_SUPPORTED_METHODS, getDemoResult } from "./demo";
+import { readFileSync, statSync } from "node:fs";
+
+import { demoProfile, demoSupportedMethods, getDemoResult } from "./demo";
 import {
   RpcAuthError,
   RpcConfigError,
@@ -36,6 +38,13 @@ export type RpcConfig = {
   url: string;
   user: string;
   password: string;
+  /**
+   * Path to Zebra's RPC cookie file. Zebra 2.x enables cookie auth by default
+   * (`enable_cookie_auth = true`), so a default zebrad answers 401 to an
+   * unauthenticated request — which is the single most common way pointing this
+   * app at a local node fails. Ignored when user/password are set.
+   */
+  cookieFile: string;
   timeoutMs: number;
   /**
    * zcashd (and Bitcoin-Core-derived nodes) ignore this field's value, while
@@ -57,6 +66,54 @@ function envInt(key: string, fallback: number): number {
   if (!raw) return fallback;
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/**
+ * Zebra's RPC cookie, cached against the file's mtime.
+ *
+ * The file holds a single `__cookie__:<secret>` line — the same convention
+ * Bitcoin Core established — so its contents *are* the `user:password` pair and
+ * get base64'd as-is. Zebra rewrites the secret on every restart, so caching by
+ * mtime rather than forever means a node restart does not leave this process
+ * sending a stale credential until it is restarted too.
+ *
+ * The secret never appears in a thrown message. A caller that mistypes the path
+ * needs the path back; nobody needs the cookie echoed into a log.
+ */
+let cookieCache: { path: string; mtimeMs: number; encoded: string } | null = null;
+
+function readCookieAuth(path: string, method: string): string {
+  let mtimeMs: number;
+  try {
+    mtimeMs = statSync(path).mtimeMs;
+  } catch {
+    throw new RpcConfigError(
+      `ZCASH_RPC_COOKIE_FILE points at ${path}, which cannot be read. Zebra writes this file into its cache directory when enable_cookie_auth is true; check the path, or set enable_cookie_auth = false in zebrad.toml.`,
+      method,
+    );
+  }
+
+  if (cookieCache && cookieCache.path === path && cookieCache.mtimeMs === mtimeMs) {
+    return cookieCache.encoded;
+  }
+
+  let contents: string;
+  try {
+    contents = readFileSync(path, "utf8").trim();
+  } catch {
+    throw new RpcConfigError(`ZCASH_RPC_COOKIE_FILE at ${path} could not be read.`, method);
+  }
+
+  if (!contents.includes(":")) {
+    throw new RpcConfigError(
+      `The RPC cookie at ${path} is not in "user:secret" form, so it is probably not Zebra's cookie file.`,
+      method,
+    );
+  }
+
+  const encoded = Buffer.from(contents).toString("base64");
+  cookieCache = { path, mtimeMs, encoded };
+  return encoded;
 }
 
 /**
@@ -82,6 +139,7 @@ export function readRpcConfig(): RpcConfig {
     url,
     user: envStr("ZCASH_RPC_USER"),
     password: envStr("ZCASH_RPC_PASSWORD"),
+    cookieFile: envStr("ZCASH_RPC_COOKIE_FILE"),
     timeoutMs: envInt("ZCASH_RPC_TIMEOUT_MS", DEFAULT_TIMEOUT_MS),
     jsonrpcVersion: envStr("ZCASH_RPC_JSONRPC_VERSION", "2.0") || "2.0",
   };
@@ -96,7 +154,11 @@ export function describeEndpoint(config: RpcConfig = readRpcConfig()): string {
   if (!config.url) return "not configured";
   try {
     const parsed = new URL(config.url);
-    const auth = config.user || config.password ? "basic auth" : "token in URL";
+    const auth = config.user || config.password
+      ? "basic auth"
+      : config.cookieFile
+        ? "cookie auth"
+        : "token in URL";
     return `${parsed.host} (${auth})`;
   } catch {
     return "malformed ZCASH_RPC_URL";
@@ -137,9 +199,15 @@ async function postOnce<T>(
 
   // Basic auth only when credentials are actually configured. Providers that
   // authenticate via the URL path get no Authorization header at all.
+  //
+  // Order matters: explicit user/password wins, then Zebra's cookie file, then
+  // nothing. A cookie file is the default shape for a local zebrad; explicit
+  // credentials are what a zcashd or a basic-auth proxy wants.
   if (config.user || config.password) {
     const encoded = Buffer.from(`${config.user}:${config.password}`).toString("base64");
     headers.Authorization = `Basic ${encoded}`;
+  } else if (config.cookieFile) {
+    headers.Authorization = `Basic ${readCookieAuth(config.cookieFile, method)}`;
   }
 
   let response: Response;
@@ -160,7 +228,14 @@ async function postOnce<T>(
   }
 
   if (response.status === 401 || response.status === 403) {
-    throw new RpcAuthError("Unauthorized", method, response.status);
+    // A default modern zebrad lands here: cookie auth is on unless turned off,
+    // and an unauthenticated request gets 401. Saying so beats "Unauthorized",
+    // which sends people looking for an rpcuser they never had to set.
+    const hint =
+      config.user || config.password || config.cookieFile
+        ? ""
+        : " No credentials are configured. Zebra enables cookie auth by default — set ZCASH_RPC_COOKIE_FILE to its cookie file, or set enable_cookie_auth = false in zebrad.toml.";
+    throw new RpcAuthError(`Unauthorized.${hint}`, method, response.status);
   }
 
   // A node can return 500 with a perfectly good JSON-RPC error body (this is
@@ -274,4 +349,4 @@ export function isDemoMode(): boolean {
   return readRpcConfig().mode === "demo";
 }
 
-export { DEMO_SUPPORTED_METHODS };
+export { demoProfile, demoSupportedMethods };

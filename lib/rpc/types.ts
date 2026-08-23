@@ -22,11 +22,11 @@ export type ValuePool = {
   id: string;
   /** Whether the node tracks a running balance for this pool. */
   monitored?: boolean;
-  /** Cumulative pool balance in ZEC (present on getblockchaininfo when monitored). */
+  /** Cumulative pool balance in ZEC (getblockchaininfo, and getblock on current zebrad). */
   chainValue?: number;
   /** Cumulative pool balance in zatoshi. */
   chainValueZat?: number;
-  /** Change in this pool caused by one block, in ZEC (present on getblock). */
+  /** Change in this pool caused by one block, in ZEC. Absent on older zebrad. */
   valueDelta?: number;
   /** Change in this pool caused by one block, in zatoshi. */
   valueDeltaZat?: number;
@@ -164,7 +164,11 @@ export type PeerInfo = {
   [key: string]: unknown;
 };
 
-/** zcashd only. Zebra does not implement getnetworkinfo. */
+/**
+ * getnetworkinfo. Current zebrad implements it; older builds return -32601, which
+ * is why lib/rpc/dialect.ts treats it as the preferred read and getinfo as the
+ * fallback rather than the other way round.
+ */
 export type NetworkInfo = {
   version?: number;
   subversion?: string;
@@ -173,7 +177,11 @@ export type NetworkInfo = {
   [key: string]: unknown;
 };
 
-/** zcashd only. Zebra exposes getrawmempool instead. */
+/**
+ * getmempoolinfo — a size and byte count in one call. Current zebrad implements
+ * it; older builds do not, and there the same numbers cost a verbose
+ * getrawmempool and a client-side sum.
+ */
 export type MempoolInfo = {
   size?: number;
   bytes?: number;
