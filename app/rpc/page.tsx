@@ -22,7 +22,14 @@
  * so every step is still an ordinary validated single call on the server.
  */
 
-import { useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  HiOutlineCommandLine,
+  HiOutlineShieldCheck,
+  HiOutlineLink,
+  HiOutlineClock,
+} from "react-icons/hi2";
 import { ZJsonView } from "@/components/ZJsonView";
 import { ZBadge, ZCard, ZDemoBanner, ZErrorNote, ZStat } from "@/components/ZUI";
 import { useEnvelope } from "@/components/useEnvelope";
@@ -55,17 +62,10 @@ type CallResult = {
   error?: { kind: string; message: string };
 };
 
-/**
- * What one attempted request can come back as. Split out from StepOutcome because
- * `skipped` is decided here in the client before anything is sent — postCall can
- * only ever produce one of these two, and saying so is what lets the recipe loop
- * read `.message` off the failure branch without a cast.
- */
 type CallOutcome =
   | { kind: "call"; use?: string; call: CallResult }
   | { kind: "rejected"; use?: string; method: string; message: string };
 
-/** A rendered step: a completed call, a client-side rejection, or one never sent. */
 type StepOutcome = CallOutcome | { kind: "skipped"; use?: string; method: string; reason: string };
 
 async function postCall(method: string, params: unknown[]): Promise<CallOutcome> {
@@ -87,14 +87,33 @@ async function postCall(method: string, params: unknown[]): Promise<CallOutcome>
 }
 
 export default function RpcPage() {
+  return (
+    <Suspense fallback={<div className="z-chart-empty">Loading RPC console…</div>}>
+      <RpcConsoleContent />
+    </Suspense>
+  );
+}
+
+function RpcConsoleContent() {
+  const searchParams = useSearchParams();
+  const initialMethod = searchParams.get("method") || "getblockchaininfo";
+
   const catalogue = useEnvelope<Catalogue>("/api/rpc", 0);
   const methods = catalogue.data?.methods ?? [];
 
-  const [selected, setSelected] = useState<string>("getblockchaininfo");
+  const [selected, setSelected] = useState<string>(initialMethod);
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [outcomes, setOutcomes] = useState<StepOutcome[]>([]);
   const [running, setRunning] = useState(false);
   const [heading, setHeading] = useState<string | null>(null);
+
+  useEffect(() => {
+    const queryMethod = searchParams.get("method");
+    if (queryMethod) {
+      setSelected(queryMethod);
+      setInputs({});
+    }
+  }, [searchParams]);
 
   const spec = methods.find((entry) => entry.method === selected) ?? null;
 
@@ -198,6 +217,40 @@ export default function RpcPage() {
 
       <ZDemoBanner meta={catalogue.meta} />
       <ZErrorNote error={catalogue.error} meta={catalogue.meta} />
+
+      {/* Straight-to-the-point RPC Explainer */}
+      <div className="z-explainer-card">
+        <div className="z-explainer-head">
+          <HiOutlineCommandLine style={{ fontSize: 18, color: "var(--z-amber)" }} />
+          <h3 className="z-explainer-title">Interactive JSON-RPC Explorer</h3>
+        </div>
+        <p className="z-explainer-desc">
+          Direct query console for testing read-only Zebra node methods with live response timing.
+        </p>
+        <div className="z-explainer-terms">
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineShieldCheck style={{ fontSize: 13, color: "var(--z-amber)" }} />
+              <span>Safe Read-Only Methods</span>
+            </div>
+            <p className="z-term-desc">Informational queries only (blocks, pools, network, and trees).</p>
+          </div>
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineLink style={{ fontSize: 13, color: "var(--z-amber)" }} />
+              <span>Multi-Step Recipes</span>
+            </div>
+            <p className="z-term-desc">Chained workflows demonstrating multi-call consensus audits.</p>
+          </div>
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineClock style={{ fontSize: 13, color: "var(--z-amber)" }} />
+              <span>Latency Benchmark</span>
+            </div>
+            <p className="z-term-desc">Live round-trip response time measured in milliseconds.</p>
+          </div>
+        </div>
+      </div>
 
       <div className="z-console-grid">
         <div className="z-stack">

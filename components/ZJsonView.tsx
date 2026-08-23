@@ -9,20 +9,31 @@
  * token becomes a text node.
  */
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { HiOutlineClipboard, HiCheck } from "react-icons/hi2";
 
 const TOKEN =
   /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
 
 export function ZJsonView({ value, maxHeight }: { value: unknown; maxHeight?: number }) {
+  const [copied, setCopied] = useState(false);
+
   let text: string;
   try {
     text = JSON.stringify(value, null, 2) ?? String(value);
   } catch {
-    // A circular structure cannot come back over JSON-RPC, but a caller could
-    // hand us anything, and a viewer that throws takes the whole page down.
     text = String(value);
   }
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore
+    }
+  };
 
   const parts: ReactNode[] = [];
   let cursor = 0;
@@ -36,7 +47,6 @@ export function ZJsonView({ value, maxHeight }: { value: unknown; maxHeight?: nu
     const key = `${match.index}`;
 
     if (str !== undefined) {
-      // A string followed by a colon is a key; the same token otherwise is a value.
       parts.push(
         <span className={colon ? "z-k" : "z-s"} key={key}>
           {str}
@@ -65,8 +75,34 @@ export function ZJsonView({ value, maxHeight }: { value: unknown; maxHeight?: nu
   if (cursor < text.length) parts.push(text.slice(cursor));
 
   return (
-    <pre className="z-json" style={maxHeight ? { maxHeight } : undefined}>
-      {parts}
-    </pre>
+    <div className="z-json-wrap">
+      <div className="z-json-toolbar">
+        <span className="z-json-size">{text.length.toLocaleString()} bytes</span>
+        <button
+          type="button"
+          className="z-btn z-btn-sm"
+          onClick={handleCopy}
+          title="Copy formatted JSON to clipboard"
+          style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+        >
+          {copied ? (
+            <>
+              <HiCheck style={{ fontSize: 14, color: "var(--z-good)" }} />
+              <span>Copied</span>
+            </>
+          ) : (
+            <>
+              <HiOutlineClipboard style={{ fontSize: 14 }} />
+              <span>Copy JSON</span>
+            </>
+          )}
+        </button>
+      </div>
+      <pre className="z-json" style={maxHeight ? { maxHeight } : undefined}>
+        {parts}
+      </pre>
+    </div>
   );
 }
+
+

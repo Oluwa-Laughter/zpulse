@@ -23,6 +23,18 @@
  */
 
 import { useState } from "react";
+import {
+  HiOutlineShieldCheck,
+  HiOutlineArrowsRightLeft,
+  HiOutlineChartBarSquare,
+  HiOutlineClock,
+  HiOutlineArrowPath,
+  HiOutlineCube,
+  HiOutlineLockClosed,
+  HiOutlineScale,
+  HiOutlineArrowTrendingDown,
+  HiOutlineArrowTrendingUp,
+} from "react-icons/hi2";
 import { ZBarSeries, ZBlockStrip, ZPoolBar, ZSparkline } from "@/components/ZCharts";
 import { poolColor, TX_CLASS_COLORS, TX_CLASS_ORDER } from "@/components/poolColors";
 import { ZBadge, ZCard, ZDemoBanner, ZErrorNote, ZLegend, ZStat } from "@/components/ZUI";
@@ -42,7 +54,10 @@ import type { UpgradeTimeline } from "@/lib/analysis/upgrades";
 const TURNSTILE_WINDOWS = [16, 48, 96, 144];
 const PRIVACY_WINDOWS = [4, 8, 12, 24, 32];
 
+type ObservatoryTab = "all" | "supply" | "turnstile" | "privacy" | "upgrades";
+
 export default function ObservatoryPage() {
+  const [activeTab, setActiveTab] = useState<ObservatoryTab>("all");
   const [turnstileBlocks, setTurnstileBlocks] = useState(48);
   const [privacyBlocks, setPrivacyBlocks] = useState(12);
 
@@ -51,33 +66,113 @@ export default function ObservatoryPage() {
   const privacy = useEnvelope<PrivacyData>(`/api/privacy?blocks=${privacyBlocks}`, 60_000);
   const upgrades = useEnvelope<UpgradeTimeline>("/api/upgrades", 300_000);
 
+  const isRefreshing = pools.refreshing || turnstile.refreshing || privacy.refreshing || upgrades.refreshing;
+
+  const handleRefreshAll = () => {
+    pools.refresh();
+    turnstile.refresh();
+    privacy.refresh();
+    upgrades.refresh();
+  };
+
   return (
     <>
-      <div className="z-page-head">
-        <h1>Observatory</h1>
-        <p>
-          Shielded supply integrity, turnstile flow and per-block privacy mix — all derived from a
-          Zcash node over JSON-RPC. Every panel names the methods it used at its foot.
-        </p>
+      <div className="z-page-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h1>Observatory</h1>
+          <p>
+            Shielded supply integrity, cross-pool turnstile flows, and per-block privacy analytics.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="z-btn z-primary"
+          onClick={handleRefreshAll}
+          title="Fetch latest block data and pool balances from the Zebra node"
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px" }}
+        >
+          <HiOutlineArrowPath className={isRefreshing ? "z-spin" : ""} style={{ fontSize: 16 }} />
+          <span>{isRefreshing ? "Fetching Live Data…" : "Refresh Live Data"}</span>
+        </button>
+      </div>
+
+      <div className="z-tabs">
+        <button
+          type="button"
+          className={`z-tab ${activeTab === "all" ? "z-active" : ""}`}
+          onClick={() => setActiveTab("all")}
+        >
+          All Panels
+        </button>
+        <button
+          type="button"
+          className={`z-tab ${activeTab === "supply" ? "z-active" : ""}`}
+          onClick={() => setActiveTab("supply")}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+        >
+          <HiOutlineShieldCheck style={{ fontSize: 15 }} />
+          <span>Shielded Supply</span>
+        </button>
+        <button
+          type="button"
+          className={`z-tab ${activeTab === "turnstile" ? "z-active" : ""}`}
+          onClick={() => setActiveTab("turnstile")}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+        >
+          <HiOutlineArrowsRightLeft style={{ fontSize: 15 }} />
+          <span>Turnstile Flow</span>
+        </button>
+        <button
+          type="button"
+          className={`z-tab ${activeTab === "privacy" ? "z-active" : ""}`}
+          onClick={() => setActiveTab("privacy")}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+        >
+          <HiOutlineChartBarSquare style={{ fontSize: 15 }} />
+          <span>Privacy Mix</span>
+        </button>
+        <button
+          type="button"
+          className={`z-tab ${activeTab === "upgrades" ? "z-active" : ""}`}
+          onClick={() => setActiveTab("upgrades")}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+        >
+          <HiOutlineClock style={{ fontSize: 15 }} />
+          <span>Upgrades</span>
+        </button>
       </div>
 
       <ZDemoBanner meta={pools.meta} />
       <ZErrorNote error={pools.error} meta={pools.meta} />
 
-      <SupplyPanel pools={pools} />
+      {(activeTab === "all" || activeTab === "supply") && (
+        <>
+          <SupplyPanel pools={pools} />
+          <div style={{ height: 20 }} />
+        </>
+      )}
 
-      <div style={{ height: 16 }} />
-      <TurnstilePanel
-        turnstile={turnstile}
-        blocks={turnstileBlocks}
-        onBlocks={setTurnstileBlocks}
-      />
+      {(activeTab === "all" || activeTab === "turnstile") && (
+        <>
+          <TurnstilePanel
+            turnstile={turnstile}
+            blocks={turnstileBlocks}
+            onBlocks={setTurnstileBlocks}
+          />
+          <div style={{ height: 20 }} />
+        </>
+      )}
 
-      <div style={{ height: 16 }} />
-      <PrivacyPanel privacy={privacy} blocks={privacyBlocks} onBlocks={setPrivacyBlocks} />
+      {(activeTab === "all" || activeTab === "privacy") && (
+        <>
+          <PrivacyPanel privacy={privacy} blocks={privacyBlocks} onBlocks={setPrivacyBlocks} />
+          <div style={{ height: 20 }} />
+        </>
+      )}
 
-      <div style={{ height: 16 }} />
-      <UpgradePanel upgrades={upgrades} />
+      {(activeTab === "all" || activeTab === "upgrades") && (
+        <UpgradePanel upgrades={upgrades} />
+      )}
     </>
   );
 }
@@ -88,8 +183,6 @@ function SupplyPanel({ pools }: { pools: ReturnType<typeof useEnvelope<PoolsData
   const supply = pools.data?.supply ?? null;
   const monitored = supply?.pools.filter((pool) => pool.balanceZec !== null) ?? [];
 
-  // The bar shows what the node reports plus transparent value, so the segments
-  // add up to something meaningful rather than to "the shielded pools only".
   const segments = monitored.map((pool) => ({
     id: pool.id,
     label: pool.label,
@@ -103,6 +196,40 @@ function SupplyPanel({ pools }: { pools: ReturnType<typeof useEnvelope<PoolsData
 
   return (
     <div className="z-stack">
+      {/* Straight-to-the-point Explainer */}
+      <div className="z-explainer-card">
+        <div className="z-explainer-head">
+          <HiOutlineShieldCheck style={{ fontSize: 18, color: "var(--z-amber)" }} />
+          <h3 className="z-explainer-title">Shielded Supply Integrity</h3>
+        </div>
+        <p className="z-explainer-desc">
+          Cryptographic proof of circulating ZEC across all Value Pools reconciled against the ZIP-208 halving curve.
+        </p>
+        <div className="z-explainer-terms">
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineCube style={{ fontSize: 13, color: "var(--z-amber)" }} />
+              <span>Value Pools</span>
+            </div>
+            <p className="z-term-desc">Balances in Sprout, Sapling, Orchard, Ironwood, and Transparent storage.</p>
+          </div>
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineLockClosed style={{ fontSize: 13, color: "var(--z-amber)" }} />
+              <span>Shielded vs Transparent</span>
+            </div>
+            <p className="z-term-desc">Shielded is zero-knowledge encrypted; Transparent is public on-chain.</p>
+          </div>
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineScale style={{ fontSize: 13, color: "var(--z-amber)" }} />
+              <span>ZIP-208 Model Check</span>
+            </div>
+            <p className="z-term-desc">Validates live block rewards against the mathematical issuance schedule.</p>
+          </div>
+        </div>
+      </div>
+
       <ZCard
         title="Shielded supply integrity"
         aside={
@@ -360,111 +487,144 @@ function TurnstilePanel({
 }) {
   const data = turnstile.data;
   const flows = data?.flows ?? [];
-  // Biggest mover first — with Orchard exit-only that is usually the drain itself.
   const ranked = [...flows].sort((a, b) => Math.abs(b.netZec) - Math.abs(a.netZec));
-  // Bar tooltips want a height per bar. The series is oldest-first over a
-  // contiguous window, so the heights are the window walked forward.
   const heights = data
     ? Array.from({ length: data.window.blocks }, (_, index) => data.window.fromHeight + index)
     : [];
 
   return (
-    <ZCard
-      title="Turnstile — value moving between pools"
-      aside={<WindowPicker options={TURNSTILE_WINDOWS} value={blocks} onChange={onBlocks} />}
-      meta={turnstile.meta}
-      note={data?.narrative}
-      span
-    >
-      <div className="z-grid" style={{ marginBottom: 18 }}>
-        <ZStat
-          label="Window"
-          value={data ? `${formatInt(data.window.fromHeight)}–${formatInt(data.window.toHeight)}` : "—"}
-          small
-          loading={turnstile.loading}
-          sub={`${data?.window.blocks ?? blocks} blocks`}
-        />
-        <ZStat
-          label="Timespan"
-          value={formatDuration(data?.timespanSeconds)}
-          small
-          loading={turnstile.loading}
-          sub="from block timestamps"
-        />
-        <ZStat
-          label="Measured block time"
-          value={data?.avgBlockSeconds ? `${data.avgBlockSeconds.toFixed(1)}` : "—"}
-          unit="s"
-          small
-          loading={turnstile.loading}
-          sub="Zcash targets 75s"
-        />
-        <ZStat
-          label="Net across all pools"
-          value={formatDelta(data?.netAllPoolsZec, 2)}
-          unit="ZEC"
-          small
-          accent
-          loading={turnstile.loading}
-          sub="positive means pools grew overall"
-        />
+    <div className="z-stack">
+      {/* Turnstile Explainer */}
+      <div className="z-explainer-card">
+        <div className="z-explainer-head">
+          <HiOutlineArrowsRightLeft style={{ fontSize: 18, color: "var(--z-amber)" }} />
+          <h3 className="z-explainer-title">Turnstile Flow & Migration</h3>
+        </div>
+        <p className="z-explainer-desc">
+          Tracks cross-pool ZEC movements as funds migrate out of exit-only pools into active shielded pools.
+        </p>
+        <div className="z-explainer-terms">
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineArrowTrendingDown style={{ fontSize: 13, color: "var(--z-warn)" }} />
+              <span>Draining (Exit-Only)</span>
+            </div>
+            <p className="z-term-desc">Funds migrating out of an older pool into modern shielded storage.</p>
+          </div>
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineArrowTrendingUp style={{ fontSize: 13, color: "var(--z-good)" }} />
+              <span>Filling</span>
+            </div>
+            <p className="z-term-desc">Receiving incoming shielded value from migrations or shielding transactions.</p>
+          </div>
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineScale style={{ fontSize: 13, color: "var(--z-amber)" }} />
+              <span>valueDelta</span>
+            </div>
+            <p className="z-term-desc">Net ZEC balance change for a specific pool in each block (+ or -).</p>
+          </div>
+        </div>
       </div>
 
-      {ranked.length === 0 ? (
-        <div className="z-chart-empty">
-          {turnstile.loading ? "reading blocks…" : "no pool movement reported in this window"}
+      <ZCard
+        title="Turnstile — value moving between pools"
+        aside={<WindowPicker options={TURNSTILE_WINDOWS} value={blocks} onChange={onBlocks} />}
+        meta={turnstile.meta}
+        note={data?.narrative}
+        span
+      >
+        <div className="z-grid" style={{ marginBottom: 18 }}>
+          <ZStat
+            label="Window"
+            value={data ? `${formatInt(data.window.fromHeight)}–${formatInt(data.window.toHeight)}` : "—"}
+            small
+            loading={turnstile.loading}
+            sub={`${data?.window.blocks ?? blocks} blocks`}
+          />
+          <ZStat
+            label="Timespan"
+            value={formatDuration(data?.timespanSeconds)}
+            small
+            loading={turnstile.loading}
+            sub="from block timestamps"
+          />
+          <ZStat
+            label="Measured block time"
+            value={data?.avgBlockSeconds ? `${data.avgBlockSeconds.toFixed(1)}` : "—"}
+            unit="s"
+            small
+            loading={turnstile.loading}
+            sub="Zcash targets 75s"
+          />
+          <ZStat
+            label="Net across all pools"
+            value={formatDelta(data?.netAllPoolsZec, 2)}
+            unit="ZEC"
+            small
+            accent
+            loading={turnstile.loading}
+            sub="positive means pools grew overall"
+          />
         </div>
-      ) : (
-        <div className="z-stack">
-          {ranked.slice(0, 4).map((flow) => (
-            <div key={flow.id}>
-              <div className="z-row" style={{ justifyContent: "space-between", marginBottom: 4 }}>
-                <span className="z-row" style={{ gap: 7 }}>
-                  <span className="z-legend-swatch" style={{ background: poolColor(flow.id) }} />
-                  <strong style={{ fontSize: 13.5 }}>{flow.label}</strong>
-                  <ZBadge
-                    tone={
-                      flow.direction === "draining" ? "warn" : flow.direction === "filling" ? "ok" : undefined
-                    }
-                  >
-                    {flow.direction}
-                  </ZBadge>
-                </span>
-                <span className="z-num" style={{ fontSize: 13 }}>
-                  {formatDelta(flow.netZec, 4)} ZEC net · {flow.activeBlocks}/{blocks} blocks active
-                </span>
-              </div>
-              <ZBarSeries
-                values={flow.series}
-                labels={heights}
-                positiveColor={poolColor(flow.id)}
-                negativeColor="var(--z-bad)"
-                height={72}
-              />
-              <div className="z-row" style={{ justifyContent: "space-between", fontSize: 11.5, color: "var(--z-text-faint)" }}>
-                <span className="z-num">in {formatZec(flow.inflowZec, 4)}</span>
-                <span className="z-num">cumulative {formatDelta(flow.cumulative[flow.cumulative.length - 1], 4)}</span>
-                <span className="z-num">out {formatZec(flow.outflowZec, 4)}</span>
-              </div>
-            </div>
-          ))}
 
-          {ranked.length > 0 ? (
-            <div>
-              <div className="z-label" style={{ marginBottom: 4 }}>
-                Cumulative movement, largest mover
+        {ranked.length === 0 ? (
+          <div className="z-chart-empty">
+            {turnstile.loading ? "reading blocks…" : "no pool movement reported in this window"}
+          </div>
+        ) : (
+          <div className="z-stack">
+            {ranked.slice(0, 4).map((flow) => (
+              <div key={flow.id}>
+                <div className="z-row" style={{ justifyContent: "space-between", marginBottom: 4 }}>
+                  <span className="z-row" style={{ gap: 7 }}>
+                    <span className="z-legend-swatch" style={{ background: poolColor(flow.id) }} />
+                    <strong style={{ fontSize: 13.5 }}>{flow.label}</strong>
+                    <ZBadge
+                      tone={
+                        flow.direction === "draining" ? "warn" : flow.direction === "filling" ? "ok" : undefined
+                      }
+                    >
+                      {flow.direction}
+                    </ZBadge>
+                  </span>
+                  <span className="z-num" style={{ fontSize: 13 }}>
+                    {formatDelta(flow.netZec, 4)} ZEC net · {flow.activeBlocks}/{blocks} blocks active
+                  </span>
+                </div>
+                <ZBarSeries
+                  values={flow.series}
+                  labels={heights}
+                  positiveColor={poolColor(flow.id)}
+                  negativeColor="var(--z-bad)"
+                  height={72}
+                />
+                <div className="z-row" style={{ justifyContent: "space-between", fontSize: 11.5, color: "var(--z-text-faint)" }}>
+                  <span className="z-num">in {formatZec(flow.inflowZec, 4)}</span>
+                  <span className="z-num">cumulative {formatDelta(flow.cumulative[flow.cumulative.length - 1], 4)}</span>
+                  <span className="z-num">out {formatZec(flow.outflowZec, 4)}</span>
+                </div>
               </div>
-              <ZSparkline
-                values={ranked[0].cumulative}
-                color={poolColor(ranked[0].id)}
-                height={56}
-                label={`cumulative movement for ${ranked[0].label}`}
-              />
-            </div>
-          ) : null}
-        </div>
-      )}
-    </ZCard>
+            ))}
+
+            {ranked.length > 0 ? (
+              <div>
+                <div className="z-label" style={{ marginBottom: 4 }}>
+                  Cumulative movement, largest mover
+                </div>
+                <ZSparkline
+                  values={ranked[0].cumulative}
+                  color={poolColor(ranked[0].id)}
+                  height={56}
+                  label={`cumulative movement for ${ranked[0].label}`}
+                />
+              </div>
+            ) : null}
+          </div>
+        )}
+      </ZCard>
+    </div>
   );
 }
 
@@ -482,13 +642,48 @@ function PrivacyPanel({
   const data = privacy.data;
 
   return (
-    <ZCard
-      title="Privacy mix — how shielded were the recent blocks?"
-      aside={<WindowPicker options={PRIVACY_WINDOWS} value={blocks} onChange={onBlocks} />}
-      meta={privacy.meta}
-      note={data?.narrative}
-      span
-    >
+    <div className="z-stack">
+      {/* Privacy Mix Explainer */}
+      <div className="z-explainer-card">
+        <div className="z-explainer-head">
+          <HiOutlineChartBarSquare style={{ fontSize: 18, color: "var(--z-amber)" }} />
+          <h3 className="z-explainer-title">Privacy Mix Analytics</h3>
+        </div>
+        <p className="z-explainer-desc">
+          Classifies real-world transaction privacy directly from block transaction payloads.
+        </p>
+        <div className="z-explainer-terms">
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineLockClosed style={{ fontSize: 13, color: "var(--z-good)" }} />
+              <span>Fully Shielded</span>
+            </div>
+            <p className="z-term-desc">100% private. Sender, recipient, and amount are all encrypted.</p>
+          </div>
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineArrowsRightLeft style={{ fontSize: 13, color: "var(--z-amber)" }} />
+              <span>Shielding / Deshielding</span>
+            </div>
+            <p className="z-term-desc">Depositing public ZEC into a private pool, or withdrawing back to public.</p>
+          </div>
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineCube style={{ fontSize: 13, color: "var(--z-text-dim)" }} />
+              <span>Transparent</span>
+            </div>
+            <p className="z-term-desc">Public transfer where addresses and amounts are visible.</p>
+          </div>
+        </div>
+      </div>
+
+      <ZCard
+        title="Privacy mix — how shielded were the recent blocks?"
+        aside={<WindowPicker options={PRIVACY_WINDOWS} value={blocks} onChange={onBlocks} />}
+        meta={privacy.meta}
+        note={data?.narrative}
+        span
+      >
       <div className="z-grid" style={{ marginBottom: 18 }}>
         <ZStat
           label="Shielded share"
@@ -567,6 +762,7 @@ function PrivacyPanel({
         </p>
       ) : null}
     </ZCard>
+    </div>
   );
 }
 
@@ -576,54 +772,84 @@ function UpgradePanel({ upgrades }: { upgrades: ReturnType<typeof useEnvelope<Up
   const data = upgrades.data;
 
   return (
-    <ZCard
-      title="Network upgrade timeline"
-      aside={
-        data ? (
-          <ZBadge tone={data.blockSecondsBasis === "measured" ? "ok" : undefined}>
-            ETAs from {data.blockSecondsBasis} block time · {data.blockSeconds.toFixed(1)}s
-          </ZBadge>
-        ) : null
-      }
-      meta={upgrades.meta}
-      note={
-        data?.note ??
-        "Read from the consensus upgrades map on getblockchaininfo — a field most dashboards never open. ETAs use the measured block time where we have enough recent headers to trust it, and fall back to the 75s target otherwise."
-      }
-      span
-    >
-      {!data ? (
-        <div className="z-chart-empty">{upgrades.loading ? "reading upgrade map…" : "no upgrade data"}</div>
-      ) : (
-        <ul className="z-timeline">
-          {data.upgrades.map((upgrade) => {
-            const isNext = data.next?.branchId === upgrade.branchId;
-            return (
-              <li
-                key={upgrade.branchId}
-                className={upgrade.status === "active" ? "z-active" : isNext ? "z-next" : undefined}
-              >
-                <div className="z-row" style={{ gap: 9 }}>
-                  <span className="z-timeline-name">{upgrade.name}</span>
-                  <ZBadge tone={upgrade.status === "active" ? "ok" : isNext ? "accent" : undefined}>
-                    {upgrade.status}
-                  </ZBadge>
-                  {isNext ? <ZBadge tone="accent">next</ZBadge> : null}
-                </div>
-                <div className="z-timeline-meta">
-                  height {formatInt(upgrade.activationHeight)} · branch {upgrade.branchId}
-                  {upgrade.blocksAway < 0
-                    ? ` · ${formatInt(Math.abs(upgrade.blocksAway))} blocks ago`
-                    : ` · in ${formatInt(upgrade.blocksAway)} blocks`}
-                  {upgrade.etaSeconds !== null
-                    ? ` · ~${formatDuration(upgrade.etaSeconds)} (${upgrade.confidence})`
-                    : ""}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </ZCard>
+    <div className="z-stack">
+      {/* Upgrades Explainer */}
+      <div className="z-explainer-card">
+        <div className="z-explainer-head">
+          <HiOutlineClock style={{ fontSize: 18, color: "var(--z-amber)" }} />
+          <h3 className="z-explainer-title">Network Upgrade Timeline</h3>
+        </div>
+        <p className="z-explainer-desc">
+          Consensus upgrade status and arrival ETAs calculated from measured block times.
+        </p>
+        <div className="z-explainer-terms">
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineCube style={{ fontSize: 13, color: "var(--z-amber)" }} />
+              <span>Network Upgrade (NU)</span>
+            </div>
+            <p className="z-term-desc">Hard fork upgrades (Sapling, Canopy, NU5, NU6) introducing protocol enhancements.</p>
+          </div>
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineClock style={{ fontSize: 13, color: "var(--z-amber)" }} />
+              <span>Measured Block Time</span>
+            </div>
+            <p className="z-term-desc">Calculated from recent header timestamps for real-world activation timing.</p>
+          </div>
+        </div>
+      </div>
+
+      <ZCard
+        title="Network upgrade timeline"
+        aside={
+          data ? (
+            <ZBadge tone={data.blockSecondsBasis === "measured" ? "ok" : undefined}>
+              ETAs from {data.blockSecondsBasis} block time · {data.blockSeconds.toFixed(1)}s
+            </ZBadge>
+          ) : null
+        }
+        meta={upgrades.meta}
+        note={
+          data?.note ??
+          "Read from the consensus upgrades map on getblockchaininfo. ETAs use the measured block time where recent headers are available."
+        }
+        span
+      >
+        {!data ? (
+          <div className="z-chart-empty">{upgrades.loading ? "reading upgrade map…" : "no upgrade data"}</div>
+        ) : (
+          <ul className="z-timeline">
+            {data.upgrades.map((upgrade) => {
+              const isNext = data.next?.branchId === upgrade.branchId;
+              return (
+                <li
+                  key={upgrade.branchId}
+                  className={upgrade.status === "active" ? "z-active" : isNext ? "z-next" : undefined}
+                >
+                  <div className="z-row" style={{ gap: 9 }}>
+                    <span className="z-timeline-name">{upgrade.name}</span>
+                    <ZBadge tone={upgrade.status === "active" ? "ok" : isNext ? "accent" : undefined}>
+                      {upgrade.status}
+                    </ZBadge>
+                    {isNext ? <ZBadge tone="accent">next</ZBadge> : null}
+                  </div>
+                  <div className="z-timeline-meta">
+                    height {formatInt(upgrade.activationHeight)} · branch {upgrade.branchId}
+                    {upgrade.blocksAway < 0
+                      ? ` · ${formatInt(Math.abs(upgrade.blocksAway))} blocks ago`
+                      : ` · in ${formatInt(upgrade.blocksAway)} blocks`}
+                    {upgrade.etaSeconds !== null
+                      ? ` · ~${formatDuration(upgrade.etaSeconds)} (${upgrade.confidence})`
+                      : ""}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </ZCard>
+    </div>
   );
 }
+

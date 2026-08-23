@@ -154,11 +154,11 @@ export const TURNSTILE_WINDOW_MAX = 144;
 export const PRIVACY_WINDOW_MAX = 32;
 
 export function defaultTurnstileWindow(): number {
-  return clampWindow(envInt("ZPULSE_TURNSTILE_WINDOW", 48), 48, TURNSTILE_WINDOW_MAX);
+  return clampWindow(envInt("ZPULSE_TURNSTILE_WINDOW", 12), 12, TURNSTILE_WINDOW_MAX);
 }
 
 export function defaultPrivacyWindow(): number {
-  return clampWindow(envInt("ZPULSE_PRIVACY_WINDOW", 12), 12, PRIVACY_WINDOW_MAX);
+  return clampWindow(envInt("ZPULSE_PRIVACY_WINDOW", 6), 6, PRIVACY_WINDOW_MAX);
 }
 
 /* ── chain tip ───────────────────────────────────────────────────────────── */

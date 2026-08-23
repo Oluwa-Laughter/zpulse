@@ -11,55 +11,65 @@
  */
 
 import Link from "next/link";
+import {
+  HiOutlineBookOpen,
+  HiOutlineShieldCheck,
+  HiOutlineCube,
+  HiOutlineArrowsRightLeft,
+  HiOutlineScale,
+  HiOutlineServer,
+  HiOutlineCommandLine,
+  HiOutlineArrowRight,
+} from "react-icons/hi2";
 import { ZTicker } from "@/components/ZTicker";
 
 const FEATURES = [
   {
     href: "/observatory",
-    kicker: "Shielded supply",
-    title: "Verify the supply, do not take it on faith",
+    kicker: "Shielded Supply & Halvings",
+    title: "Verify the supply mathematically from pool balances",
     body:
-      "Every value pool the node reports, summed and reconciled against modelled ZIP-208 issuance — including the NU6 deferred lockbox. Pools are drawn from whatever the node returns, so Ironwood and anything after it appear without a code change.",
+      "Independently audit every value pool reported by the node (Sprout, Sapling, Orchard, Ironwood) reconciled against modelled ZIP-208 issuance and the NU6 deferred lockbox. If the node and halving model disagree, the observatory flags it immediately.",
     methods: ["getblockchaininfo", "getblocksubsidy", "z_gettreestate"],
   },
   {
     href: "/observatory",
-    kicker: "Turnstile",
-    title: "Watch value drain out of Orchard",
+    kicker: "Turnstile Migration",
+    title: "Track cross-pool migration out of Orchard",
     body:
-      "Orchard became exit-only at Ironwood activation, so its balance can only fall. Each block carries per-pool value deltas, charted signed around zero — one RPC call per block, not one per transaction.",
-    methods: ["getblock", "getblockhash"],
+      "Orchard became exit-only upon Ironwood activation. Watch funds drain out of deprecated pools into modern shielded destinations block-by-block with per-pool value deltas signed around zero.",
+    methods: ["getblock (v1)", "getblockhash"],
   },
   {
     href: "/observatory",
-    kicker: "Privacy mix",
-    title: "Score every block by how private it was",
+    kicker: "Privacy Mix Analyzer",
+    title: "Classify block privacy without trusting third parties",
     body:
-      "Each transaction in the recent window classified transparent, shielding, deshielding, fully shielded or mixed, from its spend, output and action counts. Coinbase excluded from the denominator, because an empty block is not a transparent one.",
-    methods: ["getblock", "getrawtransaction"],
+      "Score every user transaction in recent blocks into Transparent, Shielding, Deshielding, Mixed, or Fully Shielded based on spend, output, and action counts directly from the node.",
+    methods: ["getblock (v2)", "getrawtransaction"],
   },
   {
     href: "/node",
-    kicker: "Node health",
-    title: "Sync, peers, mempool, latency, alerts",
+    kicker: "Zebra Node Operations & Sync",
+    title: "Self-hosted Zebra health, mempool & latency telemetry",
     body:
-      "Per-method RPC latency measured on the way through, poller history, and alert rules for an unreachable node, a stalled tip, too few peers or a height that went backwards.",
+      "Monitor your live Zebra node sync progress, block verification, inbound/outbound P2P peer mesh, mempool transaction footprint, and per-method round-trip latency sparklines.",
     methods: ["getpeerinfo", "getrawmempool", "getnetworksolps", "getinfo"],
   },
   {
     href: "/rpc",
-    kicker: "RPC console",
-    title: "Run the calls yourself",
+    kicker: "Interactive RPC Console",
+    title: "Execute allowlisted JSON-RPC queries with raw envelopes",
     body:
-      "Pick any of the 16 read-only methods, see the exact JSON-RPC envelope sent and the response returned, with latency. Chained recipes walk tip → hash → block in one click.",
-    methods: ["allowlisted", "read-only", "rate-limited"],
+      "Run 16 read-only Zcash JSON-RPC methods with live parameter validation, latency metrics, syntax-highlighted responses, and multi-step chained recipes.",
+    methods: ["allowlisted", "read-only", "live envelopes"],
   },
   {
     href: "/node",
-    kicker: "Dialect layer",
-    title: "Works on the zebrad you have, not the one it was written against",
+    kicker: "Dialect & Capability Matrix",
+    title: "Adaptive routing across Zebra releases and node versions",
     body:
-      "getmempoolinfo, getnetworkinfo and per-pool valueDelta all arrived partway through Zebra's life, so two zebrads differ. ZPulse probes the node once, caches what it answers, and satisfies each panel through whichever method that node actually has — and reads its identity from its user agent rather than guessing it from what is missing.",
+      "ZPulse actively probes node capabilities, handles method-not-found (-32601) differences gracefully, and routes queries through the most optimal path supported by your node.",
     methods: ["capability probe", "-32601 detection", "field probe"],
   },
 ];
@@ -70,20 +80,23 @@ export default function HomePage() {
       <section className="z-hero">
         <span className="z-label">Zcash Foundation Sprint · Mini Build Challenge</span>
         <h1>
-          Shielded Zcash, <em>verified live</em> from a node you choose.
+          Shielded Zcash, <em>verified live</em> from your Zebra node.
         </h1>
         <p>
-          The Ironwood design says users should be able to independently verify the circulating
-          supply by checking active pool balances. ZPulse is that check, running continuously: pool
-          balances reconciled against modelled issuance, value migrating out of the exit-only Orchard
-          pool block by block, and every recent transaction scored for how much of it was shielded.
+          Independent cryptographic verification of Zcash circulating supply, cross-pool
+          turnstile flows, and block-by-block privacy composition. Powered by direct JSON-RPC
+          connection to the official Zcash Foundation Zebra node.
         </p>
         <div className="z-hero-actions">
-          <Link href="/observatory" className="z-btn z-primary">
-            Open the observatory →
+          <Link href="/observatory" className="z-btn z-primary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span>Launch Observatory</span>
+            <HiOutlineArrowRight style={{ fontSize: 15 }} />
+          </Link>
+          <Link href="/node" className="z-btn">
+            Zebra Node & Sync
           </Link>
           <Link href="/rpc" className="z-btn">
-            Run the RPC calls yourself
+            Interactive RPC Console
           </Link>
         </div>
       </section>
@@ -91,7 +104,7 @@ export default function HomePage() {
       <ZTicker />
 
       <h2 className="z-label" style={{ margin: "36px 0 14px" }}>
-        What it reads, and which methods it reads it with
+        Observatory Modules & Analytics
       </h2>
       <div className="z-grid-2">
         {FEATURES.map((feature) => (
@@ -107,6 +120,64 @@ export default function HomePage() {
           </Link>
         ))}
       </div>
+
+      {/* Straight-to-the-point Glossary */}
+      <section style={{ marginTop: 40 }}>
+        <div className="z-explainer-card">
+          <div className="z-explainer-head">
+            <HiOutlineBookOpen style={{ fontSize: 18, color: "var(--z-amber)" }} />
+            <h3 className="z-explainer-title">Core Concepts Glossary</h3>
+          </div>
+          <p className="z-explainer-desc">
+            Quick reference guide for key privacy, supply verification, and consensus terms:
+          </p>
+          <div className="z-explainer-terms">
+            <div className="z-term-item">
+              <div className="z-term-title">
+                <HiOutlineShieldCheck style={{ fontSize: 13, color: "var(--z-amber)" }} />
+                <span>Shielded Pools</span>
+              </div>
+              <p className="z-term-desc">Zero-knowledge encrypted pools (Sapling, Orchard, Ironwood) where balances and transfers are private.</p>
+            </div>
+            <div className="z-term-item">
+              <div className="z-term-title">
+                <HiOutlineCube style={{ fontSize: 13, color: "var(--z-amber)" }} />
+                <span>Transparent Pool</span>
+              </div>
+              <p className="z-term-desc">Public ledger balances (t-addresses) visible on-chain.</p>
+            </div>
+            <div className="z-term-item">
+              <div className="z-term-title">
+                <HiOutlineArrowsRightLeft style={{ fontSize: 13, color: "var(--z-amber)" }} />
+                <span>Turnstile Migration</span>
+              </div>
+              <p className="z-term-desc">Cryptographic checkpoint verifying value moving out of older pools with zero inflation.</p>
+            </div>
+            <div className="z-term-item">
+              <div className="z-term-title">
+                <HiOutlineScale style={{ fontSize: 13, color: "var(--z-amber)" }} />
+                <span>ZIP-208 Issuance</span>
+              </div>
+              <p className="z-term-desc">Mathematical block reward halving schedule (every 840,000 blocks).</p>
+            </div>
+            <div className="z-term-item">
+              <div className="z-term-title">
+                <HiOutlineServer style={{ fontSize: 13, color: "var(--z-amber)" }} />
+                <span>Zebra (zebrad)</span>
+              </div>
+              <p className="z-term-desc">The official independent Rust node client developed by the Zcash Foundation.</p>
+            </div>
+            <div className="z-term-item">
+              <div className="z-term-title">
+                <HiOutlineCommandLine style={{ fontSize: 13, color: "var(--z-amber)" }} />
+                <span>JSON-RPC</span>
+              </div>
+              <p className="z-term-desc">Standard communication protocol used by apps to query node state directly.</p>
+            </div>
+          </div>
+        </div>
+      </section>
     </>
   );
 }
+

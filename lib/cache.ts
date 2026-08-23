@@ -61,6 +61,12 @@ export async function cached<T>(
   ttlMs: number,
   loader: () => Promise<T>,
 ): Promise<CacheResult<T>> {
+  if (ttlMs <= 0) {
+    misses += 1;
+    const value = await loader();
+    return { value, hit: false, storedAt: Date.now() };
+  }
+
   const now = Date.now();
   const existing = store.get(key);
 
@@ -114,9 +120,9 @@ export function clearCache(): void {
 
 function envInt(key: string, fallback: number): number {
   const raw = process.env[key];
-  if (!raw) return fallback;
+  if (raw === undefined || raw === null || raw === "") return fallback;
   const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 /** TTL for anything that changes when a block arrives. */
@@ -128,3 +134,5 @@ export function tipTtlMs(): number {
 export function slowTtlMs(): number {
   return envInt("ZPULSE_SLOW_TTL_MS", 120_000);
 }
+
+

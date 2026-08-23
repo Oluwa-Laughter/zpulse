@@ -99,11 +99,43 @@ const PROBES = [
 
 /* ── transport ───────────────────────────────────────────────────────────── */
 
+/**
+ * Parse ZCASH_RPC_HEADERS, the same two forms lib/rpc/client.ts accepts.
+ *
+ * Throws on a malformed value rather than returning {}. Silently dropping a
+ * misspelt spec is the worst outcome available: the probe then reports the same
+ * 401 as having no key at all, and you go looking at the key instead of the line
+ * that failed to parse.
+ */
+function parseExtraHeaders(raw) {
+  if (!raw) return {};
+  if (raw.startsWith("{")) {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new Error('ZCASH_RPC_HEADERS starts with "{" but is not valid JSON. Expected {"header-name":"value"}.');
+    }
+  }
+  const headers = {};
+  for (const pair of raw.split(/[\n,]/)) {
+    const trimmed = pair.trim();
+    if (!trimmed) continue;
+    const colon = trimmed.indexOf(":");
+    if (colon <= 0) {
+      throw new Error(
+        `ZCASH_RPC_HEADERS: "${trimmed}" is not a "Header-Name: value" pair. Use that form, or a JSON object.`,
+      );
+    }
+    headers[trimmed.slice(0, colon).trim().toLowerCase()] = trimmed.slice(colon + 1).trim();
+  }
+  return headers;
+}
+
 let requestId = 0;
 
 async function call(config, method, params) {
   requestId += 1;
-  const headers = { "content-type": "application/json" };
+  const headers = { "content-type": "application/json", ...config.extraHeaders };
   if (config.user || config.password) {
     headers.authorization = `Basic ${Buffer.from(`${config.user}:${config.password}`).toString("base64")}`;
   }
@@ -151,10 +183,55 @@ async function call(config, method, params) {
     if (err?.name === "AbortError") {
       return { status: "error", latencyMs, reason: `timed out after ${config.timeoutMs}ms` };
     }
-    return { status: "error", latencyMs, reason: err?.message ?? String(err) };
+    return { status: "error", latencyMs, reason: describeTransportFailure(err) };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Node reports every network-layer failure as the bare string `fetch failed` and
+ * hides the reason in `cause`. A probe whose entire output is sixteen lines of
+ * "fetch failed" has told you nothing; naming the code tells you whether the
+ * hostname is wrong, the node is down, or something is blocking egress.
+ *
+ * Deliberately duplicated from lib/rpc/errors.ts rather than imported: the probe
+ * runs on bare `node` with no TypeScript loader, precisely so it still works when
+ * the app's build is broken. That is when you need it most.
+ */
+function describeTransportFailure(err) {
+  const HINTS = {
+    ENOTFOUND: "that hostname does not resolve — check the URL for a typo, and that DNS works here",
+    EAI_AGAIN: "DNS lookup failed temporarily — the resolver is unreachable or rate-limiting you",
+    ECONNREFUSED:
+      "nothing accepted the connection — for a local node check it is running and its RPC port is bound; otherwise check outbound access",
+    ECONNRESET: "closed mid-request, usually by a proxy or firewall in between",
+    ETIMEDOUT: "the connection attempt timed out",
+    EHOSTUNREACH: "no route to that host",
+    ENETUNREACH: "the network is unreachable from this machine",
+    EPERM: "the OS or a sandbox denied the outbound connection",
+    UND_ERR_CONNECT_TIMEOUT: "the TCP connection timed out before TLS could begin",
+    CERT_HAS_EXPIRED: "the endpoint's TLS certificate has expired",
+    DEPTH_ZERO_SELF_SIGNED_CERT: "the endpoint presents a self-signed certificate",
+    UNABLE_TO_VERIFY_LEAF_SIGNATURE: "the TLS certificate chain could not be verified",
+  };
+
+  let deepest = null;
+  let current = err;
+  for (let depth = 0; depth < 5 && current instanceof Error; depth += 1) {
+    deepest = current;
+    let next = current.cause;
+    if (next === undefined && current instanceof AggregateError && current.errors.length > 0) {
+      next = current.errors[0];
+    }
+    current = next;
+  }
+
+  if (deepest === null) return String(err);
+  const hint = HINTS[deepest.code];
+  const detail = deepest.message || "no further detail";
+  if (hint) return `${detail} — ${hint}`;
+  return deepest.code ? `${detail} (${deepest.code})` : detail;
 }
 
 /* ── output ──────────────────────────────────────────────────────────────── */
@@ -186,6 +263,7 @@ const config = {
   password: (process.env.ZCASH_RPC_PASSWORD ?? "").trim(),
   timeoutMs: Number(process.env.ZCASH_RPC_TIMEOUT_MS ?? 8000) || 8000,
   jsonrpcVersion: (process.env.ZCASH_RPC_JSONRPC_VERSION ?? "2.0").trim() || "2.0",
+  extraHeaders: parseExtraHeaders(process.env.ZCASH_RPC_HEADERS ?? ""),
 };
 
 if (!config.url) {
@@ -207,9 +285,26 @@ try {
   /* reported below by the first call failing */
 }
 
+// How this request will authenticate. Worth stating up front and precisely: the
+// first thing you check when everything comes back 401 is whether a credential was
+// sent at all, and an earlier version of this line reported "token in URL or none"
+// even when an API key header was configured — which points the diagnosis in
+// exactly the wrong direction. Header *names* only; the value is the credential.
+const headerNames = Object.keys(config.extraHeaders);
+// `host` above is "unparseable URL" when the URL is malformed, in which case there
+// is no path to inspect either — reuse that rather than throwing here.
+const urlPath = host === "unparseable URL" ? "" : new URL(config.url).pathname;
+const auth = config.user || config.password
+  ? "basic auth"
+  : headerNames.length > 0
+    ? `header auth (${headerNames.join(", ")})`
+    : urlPath.length > 1
+      ? "token in URL path, or none"
+      : "no credentials configured";
+
 process.stdout.write(`\nZPulse endpoint probe\n`);
 process.stdout.write(
-  `${COLORS.dim}  ${host} · ${config.user || config.password ? "basic auth" : "token in URL or none"} · timeout ${config.timeoutMs}ms${COLORS.off}\n\n`,
+  `${COLORS.dim}  ${host} · ${auth} · timeout ${config.timeoutMs}ms${COLORS.off}\n\n`,
 );
 
 const context = {};

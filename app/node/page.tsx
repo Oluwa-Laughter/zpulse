@@ -56,6 +56,17 @@ type CapabilitiesData = CapabilityReport & {
   };
 };
 
+import Link from "next/link";
+import {
+  HiOutlineServerStack,
+  HiOutlineServer,
+  HiOutlineCube,
+  HiOutlineSignal,
+  HiOutlineInboxStack,
+  HiOutlineBolt,
+  HiOutlineArrowPath,
+} from "react-icons/hi2";
+
 export default function NodePage() {
   const node = useEnvelope<NodeData>("/api/node", 15_000);
   const history = useEnvelope<HistoryData>("/api/history?limit=240", 30_000);
@@ -63,15 +74,35 @@ export default function NodePage() {
 
   const data = node.data;
   const alerts = history.data?.alerts ?? [];
+  const progressPercent = data?.verificationProgress ? Math.min(Math.round(data.verificationProgress * 1000) / 10, 100) : 0;
+
+  const isRefreshing = node.refreshing || history.refreshing || capabilities.refreshing;
+
+  const handleRefreshAll = () => {
+    node.refresh();
+    history.refresh();
+    capabilities.refresh();
+  };
 
   return (
     <>
-      <div className="z-page-head">
-        <h1>Node</h1>
-        <p>
-          Health of the endpoint ZPulse is reading from, what it implements, how fast each
-          method answers, and how much of the traffic the server cache is absorbing.
-        </p>
+      <div className="z-page-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h1>Zebra Node Operations & Sync</h1>
+          <p>
+            Real-time health, sync progress, P2P topology, mempool footprint, and RPC performance.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="z-btn z-primary"
+          onClick={handleRefreshAll}
+          title="Fetch latest node status, peer count, and mempool size"
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px" }}
+        >
+          <HiOutlineArrowPath className={isRefreshing ? "z-spin" : ""} style={{ fontSize: 16 }} />
+          <span>{isRefreshing ? "Refreshing Node…" : "Refresh Node Status"}</span>
+        </button>
       </div>
 
       <ZDemoBanner meta={node.meta} />
@@ -91,6 +122,83 @@ export default function NodePage() {
         </div>
       ) : null}
 
+      {/* Zebra Node Operations & Sync HUD */}
+      <div className="z-hud-card" style={{ marginBottom: 20 }}>
+        <div className="z-row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
+          <span className="z-label" style={{ color: "var(--z-amber)", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <HiOutlineServerStack style={{ fontSize: 14 }} />
+            <span>Zebra Node Sync HUD</span>
+          </span>
+          <div className="z-row" style={{ gap: 6 }}>
+            <ZBadge tone={data?.synced === false ? "warn" : "ok"}>
+              {data?.synced === false ? "Syncing Chain" : "Fully Synchronized"}
+            </ZBadge>
+            <span className="z-num" style={{ fontSize: 12, color: "var(--z-text)" }}>
+              {formatPercent(data?.verificationProgress, 2)}
+            </span>
+          </div>
+        </div>
+
+        <div className="z-sync-bar-wrap">
+          <div className="z-sync-bar">
+            <div
+              className="z-sync-fill"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="z-row" style={{ justifyContent: "space-between", fontSize: 12, color: "var(--z-text-faint)", marginTop: 6 }}>
+          <span>Current Tip: <strong style={{ color: "var(--z-text)" }}>{data?.height ? formatInt(data.height) : "—"}</strong></span>
+          <span>
+            {data?.synced === false
+              ? `Estimated Target: ${formatInt(data?.estimatedHeight ?? 0)} blocks`
+              : `At Network Head (#${formatInt(data?.height ?? 0)})`}
+          </span>
+        </div>
+      </div>
+
+      {/* Straight-to-the-point Node Explainer */}
+      <div className="z-explainer-card">
+        <div className="z-explainer-head">
+          <HiOutlineServer style={{ fontSize: 18, color: "var(--z-amber)" }} />
+          <h3 className="z-explainer-title">Zebra Node Diagnostics</h3>
+        </div>
+        <p className="z-explainer-desc">
+          Live telemetry from your connected Zebra (<code>zebrad</code>) full node over JSON-RPC.
+        </p>
+        <div className="z-explainer-terms">
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineCube style={{ fontSize: 13, color: "var(--z-amber)" }} />
+              <span>Block Height (Tip)</span>
+            </div>
+            <p className="z-term-desc">The highest validated block on the chain.</p>
+          </div>
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineSignal style={{ fontSize: 13, color: "var(--z-amber)" }} />
+              <span>P2P Peers</span>
+            </div>
+            <p className="z-term-desc">Connected network nodes sharing blocks and transactions.</p>
+          </div>
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineInboxStack style={{ fontSize: 13, color: "var(--z-amber)" }} />
+              <span>Mempool</span>
+            </div>
+            <p className="z-term-desc">Pending unconfirmed transactions waiting to be mined.</p>
+          </div>
+          <div className="z-term-item">
+            <div className="z-term-title">
+              <HiOutlineBolt style={{ fontSize: 13, color: "var(--z-amber)" }} />
+              <span>Sol/s (Hashrate)</span>
+            </div>
+            <p className="z-term-desc">Proof-of-Work computational mining power securing the network.</p>
+          </div>
+        </div>
+      </div>
+
       <ZCard title="Endpoint health" meta={node.meta} span>
         <div className="z-grid">
           <ZStat
@@ -105,7 +213,7 @@ export default function NodePage() {
             }
           />
           <ZStat
-            label="Sync"
+            label="Sync Progress"
             value={formatPercent(data?.verificationProgress)}
             small
             loading={node.loading}
@@ -131,14 +239,14 @@ export default function NodePage() {
             sub={data?.mempool?.bytes !== null && data?.mempool ? formatBytes(data.mempool.bytes) : "size only"}
           />
           <ZStat
-            label="Network hashrate"
+            label="Network Hashrate"
             value={formatSolps(data?.solps)}
             small
             loading={node.loading}
             sub="getnetworksolps"
           />
           <ZStat
-            label="Node version"
+            label="Node Version"
             value={data?.version ?? "—"}
             small
             loading={node.loading}
@@ -157,7 +265,7 @@ export default function NodePage() {
               <ZBadge tone="accent">{capabilities.data.implementation}</ZBadge>
             ) : null
           }
-          note="Two separate facts. What the node implements is probed by calling each method once and reading the error: JSON-RPC returns −32601 for a method that does not exist, and any other error proves the method is there, so an unsupported row is a fact about the node rather than a guess. Which software it is comes from its own user agent — never inferred from missing methods, because a method Zebra lacked last year it implements today."
+          note="What the node implements is probed by calling each method once and reading the error: JSON-RPC returns −32601 for a method that does not exist, and any other error proves the method is there. Which software it is comes from its own user agent."
         >
           {capabilities.data ? (
             <>
@@ -191,7 +299,9 @@ export default function NodePage() {
                     {capabilities.data.entries.map((entry) => (
                       <tr key={entry.key}>
                         <td style={{ fontFamily: "var(--z-mono)", fontSize: 12 }}>
-                          {entry.method}
+                          <Link href={`/rpc?method=${entry.method}`} style={{ color: "inherit" }} title="Open in RPC Console">
+                            {entry.method} ↗
+                          </Link>
                           {entry.kind !== "method" ? (
                             <span style={{ color: "var(--z-text-faint)" }}> ({entry.kind})</span>
                           ) : null}
@@ -216,31 +326,21 @@ export default function NodePage() {
         </ZCard>
 
         <ZCard
-          title="Request budget"
+          title="RPC query telemetry"
           aside={
             data ? (
-              <ZBadge tone={data.cache.hitRate > 0.5 ? "ok" : "warn"}>
-                {formatPercent(data.cache.hitRate, 1)} cache hits
+              <ZBadge tone={data.calls.errors === 0 ? "ok" : "warn"}>
+                {data.calls.errors === 0 ? "100% successful" : `${data.calls.errors} errors`}
               </ZBadge>
             ) : null
           }
-          note="Hosted Zcash providers meter requests, so the cache is not an optimisation here — it is the reason a page anyone can open does not exhaust a daily quota. Identical concurrent reads are coalesced into one upstream call, and block data is cached by hash because it can never change."
+          note="Live telemetry tracking all JSON-RPC calls sent to the connected Zebra node."
         >
           <div className="z-grid">
-            <ZStat label="Upstream calls" value={formatInt(data?.calls.calls)} small loading={node.loading} sub={`${formatInt(data?.calls.errors)} errors`} />
-            <ZStat label="Cache hits" value={formatInt(data?.cache.hits)} small loading={node.loading} sub={`${formatInt(data?.cache.misses)} misses`} />
-            <ZStat label="Cached entries" value={formatInt(data?.cache.entries)} small loading={node.loading} sub="live in this process" />
+            <ZStat label="Total Calls" value={formatInt(data?.calls.calls)} small loading={node.loading} sub="queries executed" />
+            <ZStat label="Successful" value={formatInt((data?.calls.calls ?? 0) - (data?.calls.errors ?? 0))} small loading={node.loading} sub="valid responses" />
+            <ZStat label="Errors" value={formatInt(data?.calls.errors)} small loading={node.loading} sub={data?.calls.errors === 0 ? "zero faults" : "failed queries"} />
           </div>
-          {capabilities.data ? (
-            <p className="z-card-note">
-              Endpoint <code>{capabilities.data.config.endpoint}</code> in{" "}
-              <strong>{capabilities.data.config.mode}</strong> mode · tip TTL{" "}
-              {Math.round(capabilities.data.config.tipTtlMs / 1000)}s · slow TTL{" "}
-              {Math.round(capabilities.data.config.slowTtlMs / 1000)}s. Only the host is ever shown:
-              hosted providers put the access token in the URL path, so the path never leaves the
-              server.
-            </p>
-          ) : null}
         </ZCard>
       </div>
 

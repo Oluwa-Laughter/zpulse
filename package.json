@@ -10,12 +10,17 @@
     "typecheck": "tsc --noEmit",
     "verify": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-extensions.mjs scripts/verify.mjs",
     "probe": "node scripts/probe.mjs",
-    "poll": "node scripts/poll.mjs"
+    "poll": "node scripts/poll.mjs",
+    "node:start": "docker run -d --name zpulse-zebrad -p 8232:8232 -p 8233:8233 -e ZEBRA_RPC__LISTEN_ADDR=0.0.0.0:8232 -e ZEBRA_RPC__ENABLE_COOKIE_AUTH=false -v zebrad-data:/home/zebra/.cache/zebra docker.io/zfnd/zebra:latest",
+    "node:stop": "docker stop zpulse-zebrad && docker rm zpulse-zebrad",
+    "node:logs": "docker logs -f zpulse-zebrad",
+    "node:status": "docker ps --filter name=zpulse-zebrad"
   },
   "dependencies": {
     "next": "14.2.35",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "react-icons": "^5.7.0"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

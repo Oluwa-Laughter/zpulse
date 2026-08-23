@@ -1,18 +1,8 @@
 /**
- * JSON-RPC transport for a Zcash node.
+ * JSON-RPC transport for a self-hosted Zcash/Zebra node.
  *
  * This module only ever runs server-side (route handlers and scripts). The
- * node's URL and credentials never reach the browser — and note
- * `describeEndpoint()`, which exists because hosted providers such as GetBlock
- * put the access token in the URL *path*. Rendering the endpoint URL in the UI
- * or in an error message would leak that token, so only the host is ever
- * surfaced.
- *
- * Ported and extended from the earlier prototype's lib/zcashRpc.js. What is new:
- * a no-auth mode (token-in-URL providers reject a stray Authorization header on
- * some setups, and sending credentials that are not needed is pointless), one
- * retry on genuinely transient failures, typed errors, latency measurement, and
- * the demo-mode branch.
+ * node's URL and credentials never reach the browser.
  */
 
 import { readFileSync, statSync } from "node:fs";
@@ -26,6 +16,7 @@ import {
   RpcTimeoutError,
   RpcTransportError,
   RpcUnsupportedError,
+  describeTransportFailure,
   isRetryable,
 } from "./errors";
 import type { DataSource } from "./types";
@@ -41,27 +32,18 @@ export type RpcConfig = {
   /**
    * Path to Zebra's RPC cookie file. Zebra 2.x enables cookie auth by default
    * (`enable_cookie_auth = true`), so a default zebrad answers 401 to an
-   * unauthenticated request — which is the single most common way pointing this
-   * app at a local node fails. Ignored when user/password are set.
+   * unauthenticated request. Ignored when user/password are set.
    */
   cookieFile: string;
   /**
    * Extra request headers, from `ZCASH_RPC_HEADERS`.
-   *
-   * This is the shape most hosted Zcash providers actually want: not basic auth
-   * and not a token in the path, but a single custom header — `api-key` on
-   * NOWNodes, `x-api-key` on Tatum. Without this there is no way to reach either,
-   * and they are the two most accessible free tiers.
-   *
-   * Applied last, so a provider wanting `Authorization: Bearer <token>` can say so
-   * here and override the basic-auth header this module would otherwise build.
+   * Applied last to allow custom header authentication when needed.
    */
   headers: Record<string, string>;
   timeoutMs: number;
   /**
-   * zcashd (and Bitcoin-Core-derived nodes) ignore this field's value, while
-   * Zebra's JSON-RPC server is strict about "2.0". "2.0" therefore works for
-   * both, but the escape hatch is here in case a provider's proxy disagrees.
+   * zcashd ignores this field's value, while Zebra's JSON-RPC server
+   * is strict about "2.0". "2.0" works for both.
    */
   jsonrpcVersion: string;
 };
@@ -310,7 +292,7 @@ async function postOnce<T>(
     if (name === "TimeoutError" || name === "AbortError") {
       throw new RpcTimeoutError(`Timed out after ${config.timeoutMs}ms`, method);
     }
-    throw new RpcTransportError(err instanceof Error ? err.message : "transport failure", method);
+    throw new RpcTransportError(describeTransportFailure(err), method);
   }
 
   if (response.status === 401 || response.status === 403) {

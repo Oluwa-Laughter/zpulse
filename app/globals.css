@@ -44,9 +44,10 @@
   --z-pool-unknown: #b0668f;
 
   --z-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
-  --z-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+  --z-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
 
-  --z-radius: 4px;
+  --z-radius: 8px;
+  --z-radius-sm: 6px;
 }
 
 *,
@@ -63,7 +64,7 @@ body {
   color: var(--z-text);
   font-family: var(--z-sans);
   font-size: 15px;
-  line-height: 1.55;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -143,10 +144,17 @@ a:hover {
   color: var(--z-text-faint);
 }
 
+.z-nav-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
 .z-nav {
   display: flex;
   gap: 4px;
-  margin-left: auto;
   flex-wrap: wrap;
 }
 
@@ -156,6 +164,7 @@ a:hover {
   font-size: 13px;
   color: var(--z-text-dim);
   border: 1px solid transparent;
+  transition: all 0.15s ease;
 }
 
 .z-nav a:hover {
@@ -166,8 +175,43 @@ a:hover {
 
 .z-nav a[aria-current="page"] {
   color: var(--z-amber);
-  border-color: var(--z-line-bright);
+  border-color: rgba(242, 183, 33, 0.3);
   background: var(--z-panel);
+  box-shadow: 0 0 12px rgba(242, 183, 33, 0.08);
+}
+
+.z-nav-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: var(--z-panel-2);
+  border: 1px solid var(--z-line-bright);
+  font-size: 12px;
+  color: var(--z-text-dim);
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.z-nav-status-pill:hover {
+  border-color: var(--z-amber-dim);
+  text-decoration: none;
+  background: var(--z-panel);
+}
+
+.z-nav-status-label {
+  font-weight: 500;
+  color: var(--z-text);
+}
+
+.z-nav-status-height {
+  font-family: var(--z-mono);
+  font-size: 11px;
+  color: var(--z-amber);
+  background: rgba(242, 183, 33, 0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
 .z-footer {
@@ -177,6 +221,8 @@ a:hover {
   font-size: 12px;
   color: var(--z-text-faint);
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 18px;
   flex-wrap: wrap;
 }
@@ -893,14 +939,43 @@ a:hover {
   font-family: var(--z-mono);
 }
 
+.z-btn.z-btn-sm {
+  padding: 3px 8px;
+  font-size: 11.5px;
+  font-family: var(--z-mono);
+}
+
 /* ── JSON view ───────────────────────────────────────────────────────────── */
+
+.z-json-wrap {
+  position: relative;
+  background: var(--z-bg-deep);
+  border: 1px solid var(--z-line);
+  border-radius: var(--z-radius);
+  overflow: hidden;
+}
+
+.z-json-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  background: rgba(34, 30, 23, 0.6);
+  border-bottom: 1px solid var(--z-line);
+}
+
+.z-json-size {
+  font-family: var(--z-mono);
+  font-size: 11px;
+  color: var(--z-text-faint);
+}
 
 .z-json {
   margin: 0;
   padding: 12px 14px;
-  background: var(--z-bg-deep);
-  border: 1px solid var(--z-line);
-  border-radius: var(--z-radius);
+  background: transparent;
+  border: none;
+  border-radius: 0;
   font-family: var(--z-mono);
   font-size: 12px;
   line-height: 1.6;
@@ -909,6 +984,84 @@ a:hover {
   max-height: 460px;
   white-space: pre;
   tab-size: 2;
+}
+
+/* ── Tabs & View Switchers ────────────────────────────────────────────────── */
+
+.z-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--z-line);
+  padding-bottom: 12px;
+}
+
+.z-tab {
+  padding: 7px 14px;
+  border-radius: var(--z-radius);
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--z-panel);
+  border: 1px solid var(--z-line);
+  color: var(--z-text-dim);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.z-tab:hover {
+  background: var(--z-panel-2);
+  color: var(--z-text);
+  border-color: var(--z-line-bright);
+}
+
+.z-tab.z-active {
+  background: rgba(242, 183, 33, 0.12);
+  border-color: rgba(242, 183, 33, 0.4);
+  color: var(--z-amber);
+}
+
+/* ── Sync HUD & Progress Bars ─────────────────────────────────────────────── */
+
+.z-hud-card {
+  border: 1px solid rgba(242, 183, 33, 0.25);
+  border-radius: var(--z-radius);
+  background: linear-gradient(180deg, rgba(34, 30, 23, 0.8), rgba(26, 23, 18, 0.95));
+  padding: 18px 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.z-sync-bar-wrap {
+  margin: 14px 0 8px;
+}
+
+.z-sync-bar {
+  height: 10px;
+  background: var(--z-bg-deep);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--z-line-bright);
+  position: relative;
+}
+
+.z-sync-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4ec9b0, var(--z-amber));
+  border-radius: 999px;
+  transition: width 0.5s ease;
+}
+
+.z-code-snippet {
+  display: block;
+  font-family: var(--z-mono);
+  font-size: 12px;
+  background: var(--z-bg-deep);
+  border: 1px solid var(--z-line);
+  padding: 8px 12px;
+  border-radius: var(--z-radius);
+  color: var(--z-text);
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
 .z-json .z-k {
@@ -991,3 +1144,82 @@ a:hover {
     background-position: -150% 0;
   }
 }
+
+.z-spin {
+  display: inline-block;
+  animation: z-spin 0.8s linear infinite;
+}
+
+@keyframes z-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+/* ── Explainer Cards & Glossary ─────────────────────────────────────────── */
+
+.z-explainer-card {
+  border: 1px solid rgba(242, 183, 33, 0.2);
+  border-radius: var(--z-radius);
+  background: linear-gradient(180deg, rgba(34, 30, 23, 0.65), rgba(26, 23, 18, 0.85));
+  padding: 16px 18px;
+  margin-bottom: 20px;
+}
+
+.z-explainer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.z-explainer-title {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--z-amber);
+  margin: 0;
+}
+
+.z-explainer-desc {
+  font-size: 13.5px;
+  color: var(--z-text);
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.z-explainer-terms {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  padding-top: 10px;
+  border-top: 1px solid var(--z-line);
+}
+
+.z-term-item {
+  background: rgba(16, 14, 10, 0.6);
+  border: 1px solid var(--z-line);
+  border-radius: var(--z-radius);
+  padding: 8px 10px;
+}
+
+.z-term-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--z-text);
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.z-term-desc {
+  font-size: 11.5px;
+  color: var(--z-text-dim);
+  line-height: 1.4;
+  margin: 0;
+}
+

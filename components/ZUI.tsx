@@ -144,7 +144,6 @@ export function ZMeta({ meta }: { meta: Meta }) {
     <div className="z-meta">
       <ZLiveDot meta={meta} />
       <span>{ageText(meta.ageMs)}</span>
-      {meta.endpoint ? <span>{meta.endpoint}</span> : null}
       {meta.via.length > 0 ? (
         <span className="z-meta-via">
           {meta.via.map((method) => (
@@ -156,20 +155,19 @@ export function ZMeta({ meta }: { meta: Meta }) {
   );
 }
 
-/* ── banners and notes ───────────────────────────────────────────────────── */
+import { HiOutlineExclamationTriangle, HiOutlineInformationCircle } from "react-icons/hi2";
 
 /**
- * Shown whenever the app is serving fixtures instead of talking to a node.
- * Prominent on purpose — an unbadged demo is a lie about a live-data app.
+ * Shown whenever the app is serving preview fixtures.
  */
 export function ZDemoBanner({ meta }: { meta?: Meta | null }) {
   if (!meta || meta.mode !== "demo") return null;
   return (
-    <div className="z-banner">
-      <strong>Demo mode.</strong> These figures come from a built-in fixture node that emulates
-      zebrad — the response shapes, the version differences between zebrad releases and the block
-      cadence are real, the chain is not. Set <code>ZCASH_RPC_URL</code> in <code>.env.local</code>{" "}
-      to point ZPulse at a real node.
+    <div className="z-banner" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <HiOutlineInformationCircle style={{ fontSize: 18, color: "var(--z-amber)", flexShrink: 0 }} />
+      <span>
+        <strong>Preview Mode.</strong> Displaying simulated Zebra node state for interactive exploration.
+      </span>
     </div>
   );
 }
@@ -186,21 +184,24 @@ export function ZErrorNote({ error, meta }: { error?: ApiError | null; meta?: Me
   if (!error && notes.length === 0) return null;
 
   return (
-    <div className={error ? "z-banner z-bad" : "z-banner"}>
-      {error ? (
-        <>
-          <strong>{error.kind}.</strong> {error.message}
-        </>
-      ) : (
-        <strong>Partially degraded.</strong>
-      )}
-      {notes.length > 0 ? (
-        <ul className="z-note-list">
-          {notes.map((note, index) => (
-            <li key={index}>{note}</li>
-          ))}
-        </ul>
-      ) : null}
+    <div className={error ? "z-banner z-bad" : "z-banner"} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+      <HiOutlineExclamationTriangle style={{ fontSize: 18, color: error ? "var(--z-bad)" : "var(--z-warn)", flexShrink: 0, marginTop: 2 }} />
+      <div>
+        {error ? (
+          <>
+            <strong>{error.kind}.</strong> {error.message}
+          </>
+        ) : (
+          <strong>Partially degraded.</strong>
+        )}
+        {notes.length > 0 ? (
+          <ul className="z-note-list">
+            {notes.map((note, index) => (
+              <li key={index}>{note}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
     </div>
   );
 }

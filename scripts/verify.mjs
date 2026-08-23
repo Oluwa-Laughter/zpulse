@@ -2150,6 +2150,114 @@ await asyncTest("the endpoint description names the header but never its value",
   }
 });
 
+/* ── diagnosing an unreachable endpoint ──────────────────────────────────── */
+/**
+ * Node collapses every network-layer failure into the string `fetch failed` and
+ * puts the reason in `cause`. A typo in the hostname, a node that is not running,
+ * a firewall and an expired certificate all produce that same string — four
+ * problems, four different fixes, one indistinguishable message. These tests pin
+ * the unwrapping, because the failure mode is silent: the code still "works", it
+ * just stops telling you anything, and nobody notices until the day it matters.
+ */
+section("transport failure diagnosis");
+
+const errorsModule = await import("../lib/rpc/errors.ts");
+const { describeTransportFailure } = errorsModule;
+
+/** A `fetch` rejection, shaped the way undici actually shapes one. */
+function fetchFailure(code, message) {
+  const cause = new Error(message);
+  cause.code = code;
+  const outer = new TypeError("fetch failed");
+  outer.cause = cause;
+  return outer;
+}
+
+test("a DNS failure says so, instead of saying 'fetch failed'", () => {
+  const described = describeTransportFailure(
+    fetchFailure("EAI_AGAIN", "getaddrinfo EAI_AGAIN zcash-mainnet.gateway.tatum.io"),
+  );
+  assert.ok(!described.includes("fetch failed"), `still opaque: ${described}`);
+  assert.match(described, /getaddrinfo/);
+  assert.match(described, /DNS/i, "should explain what EAI_AGAIN means");
+});
+
+test("connection refused points at the node, not at the credentials", () => {
+  const described = describeTransportFailure(
+    fetchFailure("ECONNREFUSED", "connect ECONNREFUSED 127.0.0.1:8232"),
+  );
+  assert.match(described, /8232/, "the port is the most useful detail here");
+  assert.match(described, /running/i, "a local zebrad that is not up is the common cause");
+});
+
+test("each explained code gets its own explanation", () => {
+  // Guards against a hint table keyed so loosely that everything gets the same
+  // sentence — which would be no better than `fetch failed`.
+  const codes = ["ENOTFOUND", "ECONNREFUSED", "CERT_HAS_EXPIRED", "EPERM", "ETIMEDOUT"];
+  const explanations = codes.map((code) => describeTransportFailure(fetchFailure(code, `failed: ${code}`)));
+  assert.equal(new Set(explanations).size, codes.length, "two codes share an explanation");
+  for (const [index, text] of explanations.entries()) {
+    assert.ok(text.length > codes[index].length, `${codes[index]} got no explanation`);
+  }
+});
+
+test("an unrecognised code still surfaces the code rather than swallowing it", () => {
+  // The table cannot enumerate every errno, and a code it has never seen is
+  // exactly when the raw value matters most.
+  const described = describeTransportFailure(fetchFailure("ENOBUFS", "send ENOBUFS"));
+  assert.match(described, /ENOBUFS/);
+  assert.ok(!described.includes("fetch failed"));
+});
+
+test("a dual-stack host's AggregateError is unwrapped to a real reason", () => {
+  // A host with both A and AAAA records fails once per family, and undici reports
+  // the set as an AggregateError with no `cause`. Walking only `cause` stops dead
+  // here and reports "fetch failed" — the one case this whole function is for.
+  const first = new Error("connect ECONNREFUSED 127.0.0.1:8232");
+  first.code = "ECONNREFUSED";
+  const second = new Error("connect ECONNREFUSED ::1:8232");
+  second.code = "ECONNREFUSED";
+  const outer = new TypeError("fetch failed");
+  outer.cause = new AggregateError([first, second], "");
+
+  const described = describeTransportFailure(outer);
+  assert.ok(!described.includes("fetch failed"), `did not unwrap: ${described}`);
+  assert.match(described, /ECONNREFUSED|running/i);
+});
+
+test("a cause cycle terminates instead of hanging", () => {
+  // Not a shape undici produces — a guard, because an unbounded walk over
+  // attacker- or accident-shaped errors is a hang, and a hang in a render path
+  // takes the page with it.
+  const a = new Error("a");
+  const b = new Error("b");
+  a.cause = b;
+  b.cause = a;
+  assert.ok(describeTransportFailure(a).length > 0);
+});
+
+test("a non-Error is described rather than crashing the describer", () => {
+  assert.equal(describeTransportFailure("something odd"), "something odd");
+  assert.ok(describeTransportFailure(undefined).length > 0);
+});
+
+test("a rejected API key gets key advice, not password advice", () => {
+  // The hint is written where the failure happens, because only there is it known
+  // whether any credential was sent. describeRpcError used to replace it with a
+  // fixed sentence about ZCASH_RPC_USER/PASSWORD, which is the wrong advice for
+  // every hosted provider that authenticates with a header.
+  const { RpcAuthError, describeRpcError } = errorsModule;
+  const rejected = new RpcAuthError(
+    "Unauthorized. Credentials were sent, so they were rejected rather than missing — check the key itself.",
+    "getblockcount",
+    401,
+  );
+  const described = describeRpcError(rejected);
+  assert.match(described, /401/);
+  assert.match(described, /rejected rather than missing/, "the point-of-failure hint must survive");
+  assert.ok(!/ZCASH_RPC_PASSWORD/.test(described), "must not send an API-key user hunting for a password");
+});
+
 await rmRaw(storeDir, { recursive: true, force: true });
 
 /* ── report ──────────────────────────────────────────────────────────────── */
