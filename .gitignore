@@ -7,6 +7,7 @@ build/
 # Local environment — contains your node's RPC credentials. Never commit.
 .env.local
 .env*.local
+.env
 
 # Runtime data written by the poller.
 data/*.jsonl
