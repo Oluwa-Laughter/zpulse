@@ -183,7 +183,13 @@ export function readRpcConfig(): RpcConfig {
   let mode: RpcMode;
   if (explicitMode === "demo") mode = "demo";
   else if (explicitMode === "live") mode = "live";
-  else mode = url ? "live" : "demo";
+  else if (process.env.VERCEL || process.env.NETLIFY || process.env.RENDER || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    // In cloud deployment without an external URL, default to demo mode rather than failing on localhost
+    const isLocalhost = !url || url.includes("127.0.0.1") || url.includes("localhost");
+    mode = isLocalhost ? "demo" : "live";
+  } else {
+    mode = url ? "live" : "demo";
+  }
 
   return {
     mode,
