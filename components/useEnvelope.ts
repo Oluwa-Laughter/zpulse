@@ -65,7 +65,10 @@ export function createLoadGate(): LoadGate {
   let inFlight: number | null = null;
 
   return {
-    nextGeneration: () => (generation += 1),
+    nextGeneration: () => {
+      inFlight = null;
+      return (generation += 1);
+    },
     begin: () => {
       const mine = generation;
       if (inFlight === mine) return null;
@@ -142,6 +145,12 @@ export function useEnvelope<T>(url: string, intervalMs = 0): Live<T> {
     }
   }, [url, gate]);
 
+  const refresh = useCallback(() => {
+    gate.nextGeneration();
+    setRefreshing(true);
+    void load();
+  }, [gate, load]);
+
   useEffect(() => {
     gate.nextGeneration();
     setLoading(true);
@@ -178,5 +187,5 @@ export function useEnvelope<T>(url: string, intervalMs = 0): Live<T> {
     };
   }, [load, intervalMs]);
 
-  return { data, meta, error, loading, refreshing, refresh: () => void load() };
+  return { data, meta, error, loading, refreshing, refresh };
 }

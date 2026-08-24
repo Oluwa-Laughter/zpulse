@@ -19,7 +19,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <span>
                 <span className="z-brand-z">Z</span>Pulse
               </span>
-              <span className="z-brand-tag">Zcash network observatory</span>
             </Link>
             <ZNav />
           </header>
@@ -27,11 +26,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <main>{children}</main>
 
           <footer className="z-footer">
-            <span>Built for the Zcash Foundation Sprint · Mini Build Challenge</span>
-            <Link href="/rpc">16 RPC methods</Link>
-            <a href="https://zechub.wiki/developers" target="_blank" rel="noreferrer">
-              ZecHub developer docs
-            </a>
+            <span>ZPulse · Zcash Network & Shielded Supply Observatory</span>
+            <span>Direct JSON-RPC Connection to Zebra</span>
           </footer>
         </div>
       </body>

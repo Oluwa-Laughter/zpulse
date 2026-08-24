@@ -20,57 +20,43 @@ import {
   HiOutlineServer,
   HiOutlineCommandLine,
   HiOutlineArrowRight,
+  HiOutlineMagnifyingGlass,
+  HiOutlineChartBarSquare,
 } from "react-icons/hi2";
 import { ZTicker } from "@/components/ZTicker";
 
-const FEATURES = [
+const CHALLENGE_MODULES = [
   {
     href: "/observatory",
-    kicker: "Shielded Supply & Halvings",
-    title: "Verify the supply mathematically from pool balances",
-    body:
-      "Independently audit every value pool reported by the node (Sprout, Sapling, Orchard, Ironwood) reconciled against modelled ZIP-208 issuance and the NU6 deferred lockbox. If the node and halving model disagree, the observatory flags it immediately.",
+    icon: HiOutlineShieldCheck,
+    badge: "Supply & Halving Audit",
+    title: "Shielded Supply Integrity & Halvings",
+    body: "Mathematically audit all Value Pools (Sprout, Sapling, Orchard, Ironwood) reconciled against modelled ZIP-208 issuance and the NU6 lockbox.",
     methods: ["getblockchaininfo", "getblocksubsidy", "z_gettreestate"],
   },
   {
-    href: "/observatory",
-    kicker: "Turnstile Migration",
-    title: "Track cross-pool migration out of Orchard",
-    body:
-      "Orchard became exit-only upon Ironwood activation. Watch funds drain out of deprecated pools into modern shielded destinations block-by-block with per-pool value deltas signed around zero.",
-    methods: ["getblock (v1)", "getblockhash"],
-  },
-  {
-    href: "/observatory",
-    kicker: "Privacy Mix Analyzer",
-    title: "Classify block privacy without trusting third parties",
-    body:
-      "Score every user transaction in recent blocks into Transparent, Shielding, Deshielding, Mixed, or Fully Shielded based on spend, output, and action counts directly from the node.",
-    methods: ["getblock (v2)", "getrawtransaction"],
+    href: "/explorer",
+    icon: HiOutlineMagnifyingGlass,
+    badge: "Block Explorer Lite",
+    title: "Block & Transaction Deep Inspector",
+    body: "Search and inspect live Zcash blocks, decode raw transaction anatomy, classify privacy types (Coinbase, Shielding, Deshielding, Fully Shielded), and view pool value deltas.",
+    methods: ["getblock (verbosity 2)", "getrawtransaction", "getblockhash"],
   },
   {
     href: "/node",
-    kicker: "Zebra Node Operations & Sync",
-    title: "Self-hosted Zebra health, mempool & latency telemetry",
-    body:
-      "Monitor your live Zebra node sync progress, block verification, inbound/outbound P2P peer mesh, mempool transaction footprint, and per-method round-trip latency sparklines.",
+    icon: HiOutlineServer,
+    badge: "Node Operations",
+    title: "Zebra Node Operations & Sync HUD",
+    body: "Real-time sync progress tracking, peer mesh topology with round-trip pings, mempool footprint, and mining PoW Sol/s hashrate.",
     methods: ["getpeerinfo", "getrawmempool", "getnetworksolps", "getinfo"],
   },
   {
     href: "/rpc",
-    kicker: "Interactive RPC Console",
-    title: "Execute allowlisted JSON-RPC queries with raw envelopes",
-    body:
-      "Run 16 read-only Zcash JSON-RPC methods with live parameter validation, latency metrics, syntax-highlighted responses, and multi-step chained recipes.",
-    methods: ["allowlisted", "read-only", "live envelopes"],
-  },
-  {
-    href: "/node",
-    kicker: "Dialect & Capability Matrix",
-    title: "Adaptive routing across Zebra releases and node versions",
-    body:
-      "ZPulse actively probes node capabilities, handles method-not-found (-32601) differences gracefully, and routes queries through the most optimal path supported by your node.",
-    methods: ["capability probe", "-32601 detection", "field probe"],
+    icon: HiOutlineCommandLine,
+    badge: "Interactive Console",
+    title: "Interactive JSON-RPC Console",
+    body: "Execute 16 read-only Zcash JSON-RPC methods directly against your Zebra node with live syntax highlighting, millisecond latency timers, and multi-step recipe workflows.",
+    methods: ["allowlist validation", "recipe runner", "raw wire JSON"],
   },
 ];
 
@@ -78,47 +64,86 @@ export default function HomePage() {
   return (
     <>
       <section className="z-hero">
-        <span className="z-label">Zcash Foundation Sprint · Mini Build Challenge</span>
+        <span className="z-label">Live Zebra Full Node Telemetry</span>
         <h1>
-          Shielded Zcash, <em>verified live</em> from your Zebra node.
+          Zcash Network & Shielded Supply Intelligence
         </h1>
         <p>
-          Independent cryptographic verification of Zcash circulating supply, cross-pool
-          turnstile flows, and block-by-block privacy composition. Powered by direct JSON-RPC
-          connection to the official Zcash Foundation Zebra node.
+          Live JSON-RPC integration with the official Zcash Foundation Zebra node. Independently verify
+          circulating supply, inspect block transactions, monitor node sync telemetry, and run live RPC queries.
         </p>
-        <div className="z-hero-actions">
+
+        <div className="z-hero-actions" style={{ marginBottom: 20 }}>
           <Link href="/observatory" className="z-btn z-primary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span>Launch Observatory</span>
-            <HiOutlineArrowRight style={{ fontSize: 15 }} />
+            <HiOutlineShieldCheck style={{ fontSize: 16 }} />
+            <span>Observatory</span>
+            <HiOutlineArrowRight style={{ fontSize: 14 }} />
           </Link>
-          <Link href="/node" className="z-btn">
-            Zebra Node & Sync
+          <Link href="/explorer" className="z-btn" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <HiOutlineMagnifyingGlass style={{ fontSize: 16 }} />
+            <span>Block Explorer</span>
           </Link>
-          <Link href="/rpc" className="z-btn">
-            Interactive RPC Console
+          <Link href="/node" className="z-btn" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <HiOutlineServer style={{ fontSize: 16 }} />
+            <span>Node Monitor</span>
+          </Link>
+          <Link href="/rpc" className="z-btn" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <HiOutlineCommandLine style={{ fontSize: 16 }} />
+            <span>RPC Playground</span>
           </Link>
         </div>
+
+        {/* Quick Search Bar */}
+        <form action="/explorer" method="GET" style={{ display: "flex", gap: 8, maxWidth: 580, marginTop: 16 }}>
+          <div style={{ position: "relative", flex: 1 }}>
+            <HiOutlineMagnifyingGlass
+              style={{
+                position: "absolute",
+                left: 12,
+                top: "50%",
+                transform: "translateY(-50%)",
+                fontSize: 16,
+                color: "var(--z-text-faint)",
+              }}
+            />
+            <input
+              type="text"
+              name="q"
+              className="z-input"
+              placeholder="Search by Block Height (#20491), Hash, or TxID..."
+              style={{ paddingLeft: 36 }}
+            />
+          </div>
+          <button type="submit" className="z-btn z-primary">
+            Explore
+          </button>
+        </form>
       </section>
 
       <ZTicker />
 
-      <h2 className="z-label" style={{ margin: "36px 0 14px" }}>
-        Observatory Modules & Analytics
+      <h2 className="z-label" style={{ margin: "36px 0 14px", fontSize: 12, letterSpacing: "0.06em" }}>
+        Observatory Modules & Capabilities
       </h2>
       <div className="z-grid-2">
-        {FEATURES.map((feature) => (
-          <Link href={feature.href} className="z-feature" key={feature.title}>
-            <span className="z-label">{feature.kicker}</span>
-            <h3>{feature.title}</h3>
-            <p>{feature.body}</p>
-            <div className="z-feature-methods">
-              {feature.methods.map((method) => (
-                <code key={method}>{method}</code>
-              ))}
-            </div>
-          </Link>
-        ))}
+        {CHALLENGE_MODULES.map((feature) => {
+          const Icon = feature.icon;
+          return (
+            <Link href={feature.href} className="z-feature" key={feature.title}>
+              <div className="z-row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
+                <span className="z-label" style={{ color: "var(--z-amber)" }}>{feature.badge}</span>
+                <Icon style={{ fontSize: 18, color: "var(--z-amber)" }} />
+              </div>
+              <h3>{feature.title}</h3>
+              <p>{feature.body}</p>
+              <div className="z-feature-methods">
+                {feature.methods.map((method) => (
+                  <code key={method}>{method}</code>
+                ))}
+              </div>
+            </Link>
+          );
+        })}
       </div>
 
       {/* Straight-to-the-point Glossary */}

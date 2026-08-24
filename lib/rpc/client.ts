@@ -223,7 +223,15 @@ export function describeEndpoint(config: RpcConfig = readRpcConfig()): string {
   else if (config.cookieFile) styles.push("cookie auth");
   const headerNames = Object.keys(config.headers);
   if (headerNames.length > 0) styles.push(`header auth (${headerNames.join(", ")})`);
-  if (styles.length === 0) styles.push("token in URL");
+  if (styles.length === 0) {
+    let hasPath = false;
+    try {
+      hasPath = new URL(config.url).pathname.length > 1;
+    } catch {
+      // ignore
+    }
+    styles.push(hasPath ? "token in URL" : "direct RPC");
+  }
   return `${host} (${styles.join(" + ")})`;
 }
 

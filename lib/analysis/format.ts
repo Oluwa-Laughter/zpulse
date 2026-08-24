@@ -110,3 +110,29 @@ export function titleCasePoolId(id: string): string {
   if (!id) return "Unknown";
   return id.charAt(0).toUpperCase() + id.slice(1);
 }
+
+/** Format unix seconds into standard UTC date/time string: "2024-11-23 09:23:02 UTC" */
+export function formatUtcDateTime(unixSeconds: number | null | undefined): string {
+  if (unixSeconds === null || unixSeconds === undefined || !Number.isFinite(unixSeconds)) return "—";
+  const d = new Date(unixSeconds * 1000);
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  const hours = String(d.getUTCHours()).padStart(2, "0");
+  const minutes = String(d.getUTCMinutes()).padStart(2, "0");
+  const seconds = String(d.getUTCSeconds()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} UTC`;
+}
+
+/** Age formatting supporting past, recent, and future block timestamps */
+export function formatBlockAge(unixSeconds: number | null | undefined, nowMs = Date.now()): string {
+  if (unixSeconds === null || unixSeconds === undefined || !Number.isFinite(unixSeconds)) return "—";
+  const diff = Math.floor(nowMs / 1000 - unixSeconds);
+  if (diff < -30) {
+    return `in ${formatDuration(Math.abs(diff))}`;
+  }
+  if (Math.abs(diff) <= 30) {
+    return "just now";
+  }
+  return `${formatDuration(diff)} ago`;
+}

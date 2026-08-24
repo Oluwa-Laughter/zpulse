@@ -8,10 +8,11 @@ import { formatInt } from "@/lib/analysis/format";
 import { HiOutlineArrowPath } from "react-icons/hi2";
 
 const LINKS = [
-  { href: "/", label: "Overview" },
+  { href: "/", label: "Dashboard" },
   { href: "/observatory", label: "Observatory" },
-  { href: "/node", label: "Node & Sync" },
-  { href: "/rpc", label: "RPC Console" },
+  { href: "/explorer", label: "Block Explorer" },
+  { href: "/node", label: "Node Monitor" },
+  { href: "/rpc", label: "RPC Playground" },
 ];
 
 export function ZNav() {
@@ -37,33 +38,20 @@ export function ZNav() {
         ))}
       </nav>
 
-      <div className="z-row" style={{ gap: 8 }}>
-        <button
-          type="button"
-          className="z-btn z-btn-sm"
-          onClick={() => heightData.refresh()}
-          title="Fetch latest block height and chain status"
-          style={{ padding: "5px 11px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 5 }}
-        >
-          <HiOutlineArrowPath className={heightData.refreshing ? "z-spin" : ""} style={{ fontSize: 14 }} />
-          <span>Refresh</span>
-        </button>
-
-        <Link href="/node" className="z-nav-status-pill" title="View Node Diagnostics and Connection">
-          <span
-            className={`z-dot ${isError ? "z-down" : isDemo ? "z-demo" : isLive ? "z-live" : "z-cache"}`}
-            aria-hidden="true"
-          />
-          <span className="z-nav-status-label">
-            {isError ? "Node Disconnected" : isDemo ? "Zebra Emulator" : "Zebra Node"}
+      <Link href="/node" className="z-nav-status-pill" title="View Node Diagnostics and Connection">
+        <span
+          className={`z-dot ${isError ? "z-down" : isDemo ? "z-demo" : isLive ? "z-live" : "z-cache"}`}
+          aria-hidden="true"
+        />
+        <span className="z-nav-status-label">
+          {isError ? "Node Offline" : isDemo ? "Zebra Emulator" : "Zebra Node"}
+        </span>
+        {height ? (
+          <span className="z-nav-status-height">
+            #{formatInt(height)}
           </span>
-          {height ? (
-            <span className="z-nav-status-height">
-              #{formatInt(height)}
-            </span>
-          ) : null}
-        </Link>
-      </div>
+        ) : null}
+      </Link>
     </div>
   );
 }

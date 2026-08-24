@@ -75,12 +75,12 @@ export function ZStat({
   if (flash) classes.push("z-tip-flash");
 
   return (
-    <div>
-      <div className="z-label">{label}</div>
-      <span className={classes.join(" ")}>
+    <div className="z-stat">
+      <div className="z-stat-label">{label}</div>
+      <div className={classes.join(" ")}>
         {loading ? <span className="z-skeleton" style={{ width: "6ch" }} /> : value}
         {unit && !loading ? <span className="z-stat-unit">{unit}</span> : null}
-      </span>
+      </div>
       {sub ? <div className="z-stat-sub">{sub}</div> : null}
     </div>
   );
@@ -180,27 +180,27 @@ export function ZDemoBanner({ meta }: { meta?: Meta | null }) {
  * than a red toast that disappears.
  */
 export function ZErrorNote({ error, meta }: { error?: ApiError | null; meta?: Meta | null }) {
+  if (error) {
+    return (
+      <div className="z-banner z-bad" style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <HiOutlineExclamationTriangle style={{ fontSize: 18, color: "var(--z-bad)", flexShrink: 0, marginTop: 2 }} />
+        <div>
+          <strong>{error.kind}.</strong> {error.message}
+        </div>
+      </div>
+    );
+  }
+
   const notes = meta?.notes ?? [];
-  if (!error && notes.length === 0) return null;
+  if (notes.length === 0) return null;
 
   return (
-    <div className={error ? "z-banner z-bad" : "z-banner"} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-      <HiOutlineExclamationTriangle style={{ fontSize: 18, color: error ? "var(--z-bad)" : "var(--z-warn)", flexShrink: 0, marginTop: 2 }} />
-      <div>
-        {error ? (
-          <>
-            <strong>{error.kind}.</strong> {error.message}
-          </>
-        ) : (
-          <strong>Partially degraded.</strong>
-        )}
-        {notes.length > 0 ? (
-          <ul className="z-note-list">
-            {notes.map((note, index) => (
-              <li key={index}>{note}</li>
-            ))}
-          </ul>
-        ) : null}
+    <div className="z-banner" style={{ display: "flex", alignItems: "flex-start", gap: 8, background: "rgba(242, 183, 33, 0.08)", borderColor: "rgba(242, 183, 33, 0.25)", marginBottom: 18 }}>
+      <HiOutlineInformationCircle style={{ fontSize: 18, color: "var(--z-amber)", flexShrink: 0, marginTop: 2 }} />
+      <div style={{ fontSize: 13, color: "var(--z-text)" }}>
+        {notes.map((note, index) => (
+          <div key={index}>{note}</div>
+        ))}
       </div>
     </div>
   );

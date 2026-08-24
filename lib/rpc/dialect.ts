@@ -428,6 +428,16 @@ export async function fetchBlockHash(height: number): Promise<Resolved<string>> 
   }
 }
 
+/** Fetch one raw transaction by txid with verbosity 1 (JSON object). */
+export async function fetchRawTransaction(txid: string): Promise<Resolved<RawTransaction>> {
+  try {
+    const tx = await rpcCall<RawTransaction>("getrawtransaction", [txid, 1]);
+    return resolved(tx, ["getrawtransaction"]);
+  } catch (err) {
+    return unavailable(describeRpcError(err), ["getrawtransaction"]);
+  }
+}
+
 /**
  * A block header — everything about a block except its transactions.
  *

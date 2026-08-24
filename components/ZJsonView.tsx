@@ -98,7 +98,7 @@ export function ZJsonView({ value, maxHeight }: { value: unknown; maxHeight?: nu
           )}
         </button>
       </div>
-      <pre className="z-json" style={maxHeight ? { maxHeight } : undefined}>
+      <pre className="z-json" style={{ maxHeight: maxHeight || 420, overflow: "auto" }}>
         {parts}
       </pre>
     </div>

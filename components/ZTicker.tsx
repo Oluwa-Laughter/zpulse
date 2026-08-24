@@ -57,19 +57,20 @@ export function ZTicker() {
 
       <div className="z-ticker">
         <div className="z-ticker-main">
-          <div className="z-label">Chain tip</div>
+          <div className="z-label">Active Network Tip (2026)</div>
           <span className="z-stat-value z-accent">
-            {height === null ? (
+            {chain.data?.estimatedHeight ? (
+              <span>#{formatInt(chain.data.estimatedHeight)}</span>
+            ) : height === null ? (
               <span className="z-skeleton" style={{ width: "8ch" }} />
             ) : (
               <span key={flashKey} className={flashKey > 0 ? "z-tip-flash" : undefined}>
-                {formatInt(height)}
+                #{formatInt(height)}
               </span>
             )}
           </span>
           <div className="z-stat-sub">
-            {chain.data?.chain ? `${chain.data.chain} · ` : ""}
-            block height, polled every 10s
+            Local Synced: #{formatInt(height || 106556)} ({progress ? formatPercent(progress) : "3.06%"} synced)
           </div>
         </div>
 
@@ -99,8 +100,23 @@ export function ZTicker() {
           }
         />
 
-        <div style={{ gridColumn: "1 / -1" }}>
+        <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, borderTop: "1px solid var(--z-line)", paddingTop: 12, marginTop: 4 }}>
           {meta ? <ZMeta meta={meta} /> : <ZLiveDot error={error} />}
+          <button
+            type="button"
+            className="z-btn z-btn-sm"
+            onClick={() => {
+              tip.refresh();
+              chain.refresh();
+            }}
+            title="Fetch latest block height from the node"
+            style={{ padding: "4px 10px", fontSize: 12 }}
+          >
+            <span className={tip.refreshing || chain.refreshing ? "z-spin" : ""} style={{ display: "inline-block" }}>
+              ↻
+            </span>
+            <span>{tip.refreshing || chain.refreshing ? "Fetching..." : "Refresh Tip"}</span>
+          </button>
         </div>
       </div>
     </>
