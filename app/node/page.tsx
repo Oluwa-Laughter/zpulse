@@ -56,6 +56,7 @@ type CapabilitiesData = CapabilityReport & {
   };
 };
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   HiOutlineServerStack,
@@ -65,18 +66,25 @@ import {
   HiOutlineInboxStack,
   HiOutlineBolt,
   HiOutlineArrowPath,
+  HiOutlineAdjustmentsHorizontal,
+  HiOutlineCloud,
+  HiOutlineComputerDesktop,
+  HiOutlineShieldCheck,
 } from "react-icons/hi2";
+import { ZNodeSwitcherModal } from "@/components/ZNodeSwitcherModal";
 
 export default function NodePage() {
   const node = useEnvelope<NodeData>("/api/node", 15_000);
   const history = useEnvelope<HistoryData>("/api/history?limit=240", 30_000);
   const capabilities = useEnvelope<CapabilitiesData>("/api/capabilities", 0);
+  const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
 
   const data = node.data;
   const alerts = history.data?.alerts ?? [];
   const progressPercent = data?.verificationProgress ? Math.min(Math.round(data.verificationProgress * 1000) / 10, 100) : 0;
 
   const isRefreshing = node.refreshing || history.refreshing || capabilities.refreshing;
+  const isDemo = node.meta?.mode === "demo";
 
   const handleRefreshAll = () => {
     node.refresh();
@@ -93,20 +101,75 @@ export default function NodePage() {
             Real-time health, sync progress, P2P topology, mempool footprint, and RPC performance.
           </p>
         </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className="z-btn"
+            onClick={() => setIsSwitcherOpen(true)}
+            title="Switch Node: Demo Mode, Local Zebra Node, or 3rd-Party Cloud RPC"
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px" }}
+          >
+            <HiOutlineAdjustmentsHorizontal style={{ fontSize: 16, color: "var(--z-amber)" }} />
+            <span>Switch Node Source</span>
+          </button>
+
+          <button
+            type="button"
+            className="z-btn z-primary"
+            onClick={handleRefreshAll}
+            title="Fetch latest node status, peer count, and mempool size"
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px" }}
+          >
+            <HiOutlineArrowPath className={isRefreshing ? "z-spin" : ""} style={{ fontSize: 16 }} />
+            <span>{isRefreshing ? "Refreshing Node…" : "Refresh Node Status"}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Node Connection Source Banner */}
+      <div style={{ background: "var(--z-bg-raised)", border: "1px solid var(--z-line)", borderRadius: "var(--z-radius)", padding: "14px 18px", marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {isDemo ? (
+            <HiOutlineShieldCheck style={{ fontSize: 24, color: "var(--z-amber)", flexShrink: 0 }} />
+          ) : capabilities.data?.config.endpoint.includes("127.0.0.1") || capabilities.data?.config.endpoint.includes("localhost") ? (
+            <HiOutlineComputerDesktop style={{ fontSize: 24, color: "var(--z-ok)", flexShrink: 0 }} />
+          ) : (
+            <HiOutlineCloud style={{ fontSize: 24, color: "var(--z-accent)", flexShrink: 0 }} />
+          )}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>Active Connection:</span>
+              <ZBadge tone={isDemo ? "warn" : "ok"}>
+                {isDemo ? "Demo Sandbox" : capabilities.data?.config.endpoint.includes("127.0.0.1") ? "Local Node" : "3rd-Party Remote RPC"}
+              </ZBadge>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--z-text-muted)", marginTop: 2 }}>
+              {isDemo
+                ? "Simulated Zebra mainnet dialect (zero setup required)"
+                : `Connected to ${capabilities.data?.config.endpoint || "Live Node"}`}
+            </div>
+          </div>
+        </div>
+
         <button
           type="button"
-          className="z-btn z-primary"
-          onClick={handleRefreshAll}
-          title="Fetch latest node status, peer count, and mempool size"
-          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px" }}
+          className="z-btn z-btn-sm"
+          onClick={() => setIsSwitcherOpen(true)}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
         >
-          <HiOutlineArrowPath className={isRefreshing ? "z-spin" : ""} style={{ fontSize: 16 }} />
-          <span>{isRefreshing ? "Refreshing Node…" : "Refresh Node Status"}</span>
+          <HiOutlineAdjustmentsHorizontal style={{ fontSize: 14 }} />
+          <span>Change Connection</span>
         </button>
       </div>
 
       <ZDemoBanner meta={node.meta} />
       <ZErrorNote error={node.error} meta={node.meta} />
+
+      <ZNodeSwitcherModal
+        isOpen={isSwitcherOpen}
+        onClose={() => setIsSwitcherOpen(false)}
+        onChanged={handleRefreshAll}
+      />
 
       {alerts.length > 0 ? (
         <div style={{ marginBottom: 20 }}>

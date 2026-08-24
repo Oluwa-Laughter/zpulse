@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import {
   formatDifficulty,
   formatHash,
@@ -24,12 +25,14 @@ import {
 import type { ChainData } from "@/lib/data";
 import { useEnvelope } from "./useEnvelope";
 import { ZDemoBanner, ZErrorNote, ZLiveDot, ZMeta, ZStat } from "./ZUI";
+import { ZNodeSwitcherModal } from "./ZNodeSwitcherModal";
 
 type HeightData = { height: number };
 
 export function ZTicker() {
   const tip = useEnvelope<HeightData>("/api/height", 10_000);
   const chain = useEnvelope<ChainData>("/api/chain", 30_000);
+  const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
 
   const height = tip.data?.height ?? chain.data?.height ?? null;
 
@@ -57,11 +60,15 @@ export function ZTicker() {
 
       <div className="z-ticker">
         <div className="z-ticker-main">
-          <div className="z-label">Active Network Tip (2026)</div>
+          <div className="z-label">
+            {meta?.mode === "demo"
+              ? "Active Network Tip (Demo)"
+              : chain.data?.synced === false
+                ? "Syncing Node Tip"
+                : "Active Mainnet Tip"}
+          </div>
           <span className="z-stat-value z-accent">
-            {chain.data?.estimatedHeight ? (
-              <span>#{formatInt(chain.data.estimatedHeight)}</span>
-            ) : height === null ? (
+            {height === null ? (
               <span className="z-skeleton" style={{ width: "8ch" }} />
             ) : (
               <span key={flashKey} className={flashKey > 0 ? "z-tip-flash" : undefined}>
@@ -70,7 +77,11 @@ export function ZTicker() {
             )}
           </span>
           <div className="z-stat-sub">
-            Local Synced: #{formatInt(height || 106556)} ({progress ? formatPercent(progress) : "3.06%"} synced)
+            {chain.data?.synced === false
+              ? `Syncing (${progress ? formatPercent(progress) : "in progress"}) · Target #${formatInt(chain.data?.estimatedHeight ?? 0)}`
+              : meta?.mode === "demo"
+                ? "Simulated Zebra mainnet dialect · Real-time blocks"
+                : "Fully synchronized at active chain head"}
           </div>
         </div>
 
@@ -102,23 +113,45 @@ export function ZTicker() {
 
         <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, borderTop: "1px solid var(--z-line)", paddingTop: 12, marginTop: 4 }}>
           {meta ? <ZMeta meta={meta} /> : <ZLiveDot error={error} />}
-          <button
-            type="button"
-            className="z-btn z-btn-sm"
-            onClick={() => {
-              tip.refresh();
-              chain.refresh();
-            }}
-            title="Fetch latest block height from the node"
-            style={{ padding: "4px 10px", fontSize: 12 }}
-          >
-            <span className={tip.refreshing || chain.refreshing ? "z-spin" : ""} style={{ display: "inline-block" }}>
-              ↻
-            </span>
-            <span>{tip.refreshing || chain.refreshing ? "Fetching..." : "Refresh Tip"}</span>
-          </button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              type="button"
+              className="z-btn z-btn-sm"
+              onClick={() => setIsSwitcherOpen(true)}
+              title="Switch Node Connection (Demo / Local / Cloud RPC)"
+              style={{ padding: "4px 10px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}
+            >
+              <HiOutlineAdjustmentsHorizontal style={{ fontSize: 13, color: "var(--z-amber)" }} />
+              <span>Switch Node</span>
+            </button>
+
+            <button
+              type="button"
+              className="z-btn z-btn-sm"
+              onClick={() => {
+                tip.refresh();
+                chain.refresh();
+              }}
+              title="Fetch latest block height from the node"
+              style={{ padding: "4px 10px", fontSize: 12 }}
+            >
+              <span className={tip.refreshing || chain.refreshing ? "z-spin" : ""} style={{ display: "inline-block" }}>
+                ↻
+              </span>
+              <span>{tip.refreshing || chain.refreshing ? "Fetching..." : "Refresh Tip"}</span>
+            </button>
+          </div>
         </div>
       </div>
+
+      <ZNodeSwitcherModal
+        isOpen={isSwitcherOpen}
+        onClose={() => setIsSwitcherOpen(false)}
+        onChanged={() => {
+          tip.refresh();
+          chain.refresh();
+        }}
+      />
     </>
   );
 }

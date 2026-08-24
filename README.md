@@ -12,18 +12,19 @@ ZPulse is a modern, high-performance web application and telemetry suite built t
 
 ---
 
-## 🚀 Live Demo vs. Local Live Node
+## 🌐 3 Flexible Connection Modes (Switch in 1 Click)
 
-| Environment | Mode | Description |
+ZPulse allows users and judges to switch between **3 connection modes** right from the UI using the **"Switch Node"** button in the header navbar or dashboard:
+
+| Mode | Source | Best For |
 | :--- | :--- | :--- |
-| **Deployed Web App** | `Demo Mode` | Runs ZPulse's built-in, fully interactive realistic Zebra mainnet dialect. Evaluators and judges can explore all 4 modules, run RPC recipes, and inspect privacy metrics 24/7 without needing a dedicated remote server running. |
-| **Local Machine** | `Live Node Mode` | Connects directly over JSON-RPC to a real running Zebra node (`zebrad`) at `http://127.0.0.1:8232` (or a remote node like NOWNodes / QuickNode). |
+| 🔵 **Interactive Demo Mode** | Built-in Simulated Zebra Mainnet Dialect | Zero-setup testing & live cloud evaluations 24/7. Demonstrates full dialect handling, RPC recipes, privacy mix, and ZIP-208 supply math. |
+| 🟢 **Local Zebra Node** | `http://127.0.0.1:8232` (Docker / Native) | Full node operators running `zebrad` on their local machine with live peer gossip and on-chain verification. |
+| 🟣 **3rd-Party Remote RPC** | Any Remote Zcash JSON-RPC Endpoint | Connecting to an always-on remote cloud node using a private API key or custom authentication header. |
 
-> [!IMPORTANT]
-> **To evaluate Live Data from a Real Node:**
-> 1. Run Zebra locally via Docker: `npm run node:start`
-> 2. Set `ZCASH_RPC_URL=http://127.0.0.1:8232` in `.env.local`
-> 3. Launch the app: `npm run dev`
+> [!TIP]
+> **Switching Nodes in the App:**
+> Click the **Node Status Pill** in the top navigation bar or the **"Switch Node"** button on the dashboard/node monitor to open the **Node Switcher Modal**. You can test connection latency before saving!
 
 ---
 
@@ -73,27 +74,25 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## ☁️ Connecting Cloud Deployments to a Live Node
+## 🔒 3rd-Party Remote RPC Node & API Key Privacy
 
-If you want your cloud-deployed app (on Vercel, Netlify, Render, etc.) to talk to a 24/7 live Zcash node, you can configure:
+ZPulse supports connecting to **any remote 3rd-party Zcash RPC node** while keeping your API keys completely private:
 
-### Option A: Cloud RPC Provider (e.g. NOWNodes / QuickNode)
-In your deployment dashboard (e.g. Vercel Project Settings ➔ Environment Variables):
+### In-App Node Switcher (Zero Setup)
+1. Click **"Switch Node"** in the top navigation bar.
+2. Select **"3rd-Party Remote RPC"**.
+3. Enter your **RPC URL** and **API Key / Secret Token**.
+4. Click **"Test Connection"** and **"Save & Switch"**.
+
+> [!NOTE]
+> **Zero-Leak Security Architecture:**
+> All RPC requests are proxied server-to-server. Your API key is encrypted and stored exclusively in a secure, server-side `HttpOnly` session cookie. It is never included in client JavaScript bundles, never sent to third parties, and never logged.
+
+### Or via Environment Variables (`.env.local` / Cloud Hosting Settings)
 ```env
-ZCASH_RPC_URL=https://zcash.nownodes.io
-ZCASH_RPC_HEADERS={"api-key":"YOUR_NOWNODES_API_KEY"}
+ZCASH_RPC_URL=https://your-zcash-rpc-provider.com/rpc
+ZCASH_RPC_HEADERS={"api-key":"YOUR_PRIVATE_API_KEY"}
 ```
-*(or QuickNode: `ZCASH_RPC_URL=https://your-subdomain.zcash-mainnet.quiknode.pro/your-token/`)*
-
-### Option B: Tunnel Your Local Zebra Node (via ngrok)
-1. On your machine:
-   ```bash
-   ngrok http 8232
-   ```
-2. In your cloud deployment Environment Variables:
-   ```env
-   ZCASH_RPC_URL=https://your-tunnel-url.ngrok-free.app
-   ```
 
 ---
 

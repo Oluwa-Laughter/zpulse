@@ -295,8 +295,9 @@ a:hover {
   max-width: 860px;
 }
 
-/* ── Cards & Structure ───────────────────────────────────────────────────── */
+/* ── Cards & Panels ──────────────────────────────────────────────────────── */
 
+.z-panel,
 .z-card {
   background: var(--z-panel);
   border: 1px solid var(--z-line);
@@ -306,22 +307,28 @@ a:hover {
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
-.z-card.z-card-span {
+.z-card.z-card-span,
+.z-panel.z-panel-span {
   grid-column: 1 / -1;
 }
 
-.z-card-head {
+.z-card-head,
+.z-panel-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 18px;
   flex-wrap: wrap;
   gap: 12px;
+  min-height: 28px;
 }
 
-.z-card-title {
+.z-card-title,
+.z-panel-title {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
@@ -329,26 +336,49 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 8px;
+  line-height: 1.3;
 }
 
-.z-card-note {
+.z-card-note,
+.z-panel-note {
   margin: 14px 0 0;
-  font-size: 14px;
+  font-size: 13.5px;
   color: var(--z-text-dim);
+  line-height: 1.5;
 }
 
 .z-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
   max-width: 100%;
+  align-items: stretch;
 }
 
 .z-grid-2 {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: 20px;
   max-width: 100%;
+  align-items: stretch;
+}
+
+.z-grid-2 > .z-card,
+.z-grid-2 > .z-panel,
+.z-grid-2 > .z-feature {
+  margin-bottom: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.z-grid-2 > .z-card > .z-table-wrap,
+.z-grid-2 > .z-card > .z-grid,
+.z-grid-2 > .z-card > .z-stack,
+.z-grid-2 > .z-panel > .z-table-wrap,
+.z-grid-2 > .z-panel > .z-grid,
+.z-grid-2 > .z-panel > .z-stack {
+  flex: 1;
 }
 
 .z-stack {
@@ -357,6 +387,11 @@ a:hover {
   gap: 18px;
   max-width: 100%;
   min-width: 0;
+}
+
+.z-stack > .z-card,
+.z-stack > .z-panel {
+  margin-bottom: 0;
 }
 
 .z-row {
@@ -920,25 +955,37 @@ a:hover {
 
 .z-banner {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 14px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 10px 14px;
   background: rgba(242, 183, 33, 0.08);
-  border: 1px solid rgba(242, 183, 33, 0.2);
+  border: 1px solid rgba(242, 183, 33, 0.25);
   border-radius: var(--z-radius);
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--z-text);
   margin-bottom: 18px;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 10px;
   max-width: 100%;
+}
+
+.z-banner.z-bad {
+  background: rgba(229, 103, 95, 0.1);
+  border-color: rgba(229, 103, 95, 0.3);
+  color: #fca5a5;
+}
+
+.z-banner.z-ok {
+  background: rgba(78, 201, 176, 0.1);
+  border-color: rgba(78, 201, 176, 0.3);
+  color: #a7f3d0;
 }
 
 .z-error-note {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 14px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
   background: rgba(229, 103, 95, 0.08);
   border: 1px solid rgba(229, 103, 95, 0.25);
   border-radius: var(--z-radius);
@@ -1079,4 +1126,77 @@ a:hover {
 
 .z-spin {
   animation: spin 1s linear infinite;
+}
+
+/* ── Modal & Switcher ─────────────────────────────────────────────────────── */
+
+.z-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+}
+
+.z-modal-card {
+  background: var(--z-panel);
+  border: 1px solid var(--z-line-bright);
+  border-radius: var(--z-radius-lg);
+  padding: 24px;
+  width: 100%;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  animation: modalIn 0.15s ease-out;
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.z-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--z-line);
+}
+
+.z-btn-icon {
+  background: transparent;
+  border: none;
+  color: var(--z-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s;
+}
+
+.z-btn-icon:hover {
+  color: var(--z-text);
+  background: var(--z-panel-2);
+}
+
+.z-select {
+  background: var(--z-bg-deep);
+  border: 1px solid var(--z-line-bright);
+  border-radius: var(--z-radius);
+  color: var(--z-text);
+  font-family: inherit;
+  font-size: 13.5px;
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.z-select:focus {
+  border-color: var(--z-amber);
 }

@@ -130,9 +130,9 @@ export default function HomePage() {
           const Icon = feature.icon;
           return (
             <Link href={feature.href} className="z-feature" key={feature.title}>
-              <div className="z-row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
+              <div className="z-row" style={{ alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <Icon style={{ fontSize: 18, color: "var(--z-amber)", flexShrink: 0 }} />
                 <span className="z-label" style={{ color: "var(--z-amber)" }}>{feature.badge}</span>
-                <Icon style={{ fontSize: 18, color: "var(--z-amber)" }} />
               </div>
               <h3>{feature.title}</h3>
               <p>{feature.body}</p>

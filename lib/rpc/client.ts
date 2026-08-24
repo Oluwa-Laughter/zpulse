@@ -167,18 +167,60 @@ function parseExtraHeaders(raw: string): Record<string, string> {
   return headers;
 }
 
+function getSessionOverride(): Partial<RpcConfig> | null {
+  try {
+    // Dynamically require next/headers if inside Next.js request context
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { cookies, headers } = require("next/headers");
+    const cookieStore = cookies();
+    const configCookie = cookieStore.get("zpulse_node_config");
+    if (configCookie?.value) {
+      const decoded = JSON.parse(decodeURIComponent(configCookie.value));
+      return decoded;
+    }
+    const headersList = headers();
+    const modeHeader = headersList.get("x-zpulse-mode");
+    const urlHeader = headersList.get("x-zpulse-url");
+    if (modeHeader || urlHeader) {
+      return {
+        mode: modeHeader === "demo" ? "demo" : modeHeader === "live" ? "live" : undefined,
+        url: urlHeader || undefined,
+        headers: headersList.get("x-zpulse-headers") ? JSON.parse(headersList.get("x-zpulse-headers")!) : undefined,
+        user: headersList.get("x-zpulse-user") || undefined,
+        password: headersList.get("x-zpulse-password") || undefined,
+      };
+    }
+  } catch {
+    // Outside Next.js request context (e.g. CLI verify test suite)
+  }
+  return null;
+}
+
 /**
  * Read configuration fresh on each call rather than caching at module load, so
- * editing .env.local during `next dev` takes effect without a restart.
+ * editing .env.local or switching connection in the UI takes effect immediately.
  *
- * Mode resolution: an explicit ZCASH_RPC_MODE wins; otherwise having a URL
- * means live and having none means demo. That way a fresh clone with no
- * configuration renders something instead of erroring, but a configured
- * endpoint is never silently ignored.
+ * Mode resolution: an explicit session / ZCASH_RPC_MODE wins; otherwise having a URL
+ * means live and having none means demo.
  */
-export function readRpcConfig(): RpcConfig {
-  const url = envStr("ZCASH_RPC_URL");
-  const explicitMode = envStr("ZCASH_RPC_MODE").toLowerCase();
+export function readRpcConfig(override?: Partial<RpcConfig>): RpcConfig {
+  const session = override ?? getSessionOverride();
+
+  if (session?.mode === "demo") {
+    return {
+      mode: "demo",
+      url: "",
+      user: "",
+      password: "",
+      cookieFile: "",
+      headers: {},
+      timeoutMs: envInt("ZCASH_RPC_TIMEOUT_MS", DEFAULT_TIMEOUT_MS),
+      jsonrpcVersion: "2.0",
+    };
+  }
+
+  const url = session?.url !== undefined ? session.url : envStr("ZCASH_RPC_URL");
+  const explicitMode = session?.mode || envStr("ZCASH_RPC_MODE").toLowerCase();
 
   let mode: RpcMode;
   if (explicitMode === "demo") mode = "demo";
@@ -191,13 +233,17 @@ export function readRpcConfig(): RpcConfig {
     mode = url ? "live" : "demo";
   }
 
+  const user = session?.user !== undefined ? session.user : envStr("ZCASH_RPC_USER");
+  const password = session?.password !== undefined ? session.password : envStr("ZCASH_RPC_PASSWORD");
+  const headers = session?.headers !== undefined ? session.headers : parseExtraHeaders(envStr("ZCASH_RPC_HEADERS"));
+
   return {
     mode,
     url,
-    user: envStr("ZCASH_RPC_USER"),
-    password: envStr("ZCASH_RPC_PASSWORD"),
+    user,
+    password,
     cookieFile: envStr("ZCASH_RPC_COOKIE_FILE"),
-    headers: parseExtraHeaders(envStr("ZCASH_RPC_HEADERS")),
+    headers,
     timeoutMs: envInt("ZCASH_RPC_TIMEOUT_MS", DEFAULT_TIMEOUT_MS),
     jsonrpcVersion: envStr("ZCASH_RPC_JSONRPC_VERSION", "2.0") || "2.0",
   };
