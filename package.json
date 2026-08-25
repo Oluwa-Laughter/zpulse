@@ -11,7 +11,7 @@
     "verify": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-extensions.mjs scripts/verify.mjs",
     "probe": "node scripts/probe.mjs",
     "poll": "node scripts/poll.mjs",
-    "node:start": "docker run -d --name zpulse-zebrad -p 8232:8232 -p 8233:8233 -e ZEBRA_RPC__LISTEN_ADDR=0.0.0.0:8232 -e ZEBRA_RPC__ENABLE_COOKIE_AUTH=false -v zebrad-data:/home/zebra/.cache/zebra docker.io/zfnd/zebra:latest",
+    "node:start": "(docker start zpulse-zebrad 2>/dev/null || docker run -d --name zpulse-zebrad -p 8232:8232 -p 8233:8233 -e ZEBRA_RPC__LISTEN_ADDR=0.0.0.0:8232 -e ZEBRA_RPC__ENABLE_COOKIE_AUTH=false -v zebrad-data:/home/zebra/.cache/zebra docker.io/zfnd/zebra:latest) && echo 'Zebra node (zpulse-zebrad) is running in the background on port 8232.'",
     "node:stop": "docker stop zpulse-zebrad && docker rm zpulse-zebrad",
     "node:logs": "docker logs -f zpulse-zebrad",
     "node:status": "docker ps --filter name=zpulse-zebrad"

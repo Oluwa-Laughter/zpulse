@@ -52,8 +52,6 @@ export function ZNodeSwitcherModal({
 
   // Local Node Form State
   const [localUrl, setLocalUrl] = useState("http://127.0.0.1:8232");
-  const [localUser, setLocalUser] = useState("");
-  const [localPassword, setLocalPassword] = useState("");
 
   // 3rd-Party Remote RPC Form State
   const [remoteUrl, setRemoteUrl] = useState("");
@@ -105,8 +103,6 @@ export function ZNodeSwitcherModal({
         action: "test",
         mode: "live",
         url: localUrl,
-        user: localUser || undefined,
-        password: localPassword || undefined,
       };
     } else {
       payload = {
@@ -164,8 +160,6 @@ export function ZNodeSwitcherModal({
         action: "save",
         mode: "live",
         url: localUrl,
-        user: localUser || undefined,
-        password: localPassword || undefined,
       };
     } else {
       payload = {
@@ -287,13 +281,13 @@ export function ZNodeSwitcherModal({
         {activeTab === "demo" && (
           <div className="z-stack" style={{ gap: 14 }}>
             <div style={{ background: "var(--z-bg-raised)", padding: 14, borderRadius: "var(--z-radius)", border: "1px solid var(--z-line)" }}>
-              <h4 style={{ margin: "0 0 6px", fontSize: 14 }}>🔵 Built-in Zebra Mainnet Dialect</h4>
+              <h4 style={{ margin: "0 0 6px", fontSize: 14 }}>Built-in Zebra Mainnet Dialect</h4>
               <p style={{ margin: 0, fontSize: 13, color: "var(--z-text-muted)", lineHeight: 1.5 }}>
                 Zero credentials or local node needed. Emulates an authentic Zcash mainnet Zebra node with realistic blocks, mempool transactions, turnstile flows, and ZIP-208 mathematical supply reconciliation.
               </p>
             </div>
             <div style={{ fontSize: 12, color: "var(--z-text-faint)" }}>
-              ✅ Recommended for live cloud presentations, judges, and instant evaluation.
+              Recommended for live cloud presentations, judges, and instant evaluation.
             </div>
           </div>
         )}
@@ -319,33 +313,6 @@ export function ZNodeSwitcherModal({
                 placeholder="http://127.0.0.1:8232"
                 style={{ width: "100%", marginTop: 4 }}
               />
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div>
-                <label className="z-label" htmlFor="local-user-input">RPC User (Optional)</label>
-                <input
-                  id="local-user-input"
-                  type="text"
-                  className="z-input"
-                  value={localUser}
-                  onChange={(e) => setLocalUser(e.target.value)}
-                  placeholder="rpcuser"
-                  style={{ width: "100%", marginTop: 4 }}
-                />
-              </div>
-              <div>
-                <label className="z-label" htmlFor="local-pwd-input">RPC Password (Optional)</label>
-                <input
-                  id="local-pwd-input"
-                  type="password"
-                  className="z-input"
-                  value={localPassword}
-                  onChange={(e) => setLocalPassword(e.target.value)}
-                  placeholder="rpcpassword"
-                  style={{ width: "100%", marginTop: 4 }}
-                />
-              </div>
             </div>
           </div>
         )}

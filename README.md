@@ -1,14 +1,14 @@
 # ZPulse ⚡ — Zcash Network & Shielded Supply Intelligence
-
-> **Submission for the Zcash Foundation Sprint · Mini Build Challenge**  
+ 
 > Direct JSON-RPC integration with the official Zcash Foundation Zebra Node (`zebrad`).
 
-ZPulse is a modern, high-performance web application and telemetry suite built to interact directly with the Zcash network over JSON-RPC. It addresses all four challenge tracks proposed in the Mini Build Challenge:
+ZPulse is a modern, high-performance web application and suite built to interact directly with the Zcash network over JSON-RPC. It allows you to monitor, explore, and interact with the Zcash network in real-time.
 
-1. 📊 **Zcash Dashboard & Observatory** (`/` & `/observatory`): Real-time network telemetry, value pool tracking (`Transparent`, `Sprout`, `Sapling`, `Orchard`, `Ironwood`), and mathematical ZIP-208 supply reconciliation.
-2. 🔍 **Block Explorer Lite** (`/explorer`): Search live & milestone blocks from Genesis `#0` to modern `#3.4M+`, inspect transactions, decode transparent vs. shielded operations, and audit per-block pool value deltas.
-3. 🦓 **Zebra Node Operations & Sync Monitor** (`/node`): Sync progress HUD, P2P peer mesh topology with ping times and client versions, mempool footprint, and PoW mining hashrate.
-4. ⚡ **RPC Console & Playground** (`/rpc`): Interactive 1-click execution of 16 read-only Zcash JSON-RPC methods with live syntax highlighting, latency benchmarks, and chained multi-step recipes.
+1. 📊 **Network Dashboard** (`/`): Real-time network telemetry overview, quick chain metrics, instant block/tx search, and live network ticker.
+2. 🔬 **Shielded Chain Observatory** (`/observatory`): Value pool balance tracking (`Transparent`, `Sprout`, `Sapling`, `Orchard`, `Ironwood`), turnstile migration deltas, per-block privacy transaction classification, and mathematical ZIP-208 supply reconciliation.
+3. 🔍 **Block Explorer Lite** (`/explorer`): Search live & milestone blocks from Genesis `#0` to modern `#3.4M+`, inspect transactions, decode transparent vs. shielded operations, and audit per-block pool value deltas.
+4. 🦓 **Zebra Node Operations & Sync Monitor** (`/node`): Sync progress HUD, P2P peer mesh topology with ping times and client versions, mempool footprint, and PoW mining hashrate.
+5. ⚡ **RPC Console & Playground** (`/rpc`): Interactive 1-click execution of 16 read-only Zcash JSON-RPC methods with live syntax highlighting, latency benchmarks, and chained multi-step recipes.
 
 ---
 
@@ -128,11 +128,3 @@ npm run verify
 npm run typecheck
 ```
 *All 152 unit and integration tests pass with 0 errors.*
-
----
-
-## 🏆 Mini Build Challenge Checklist
-- [x] **Landing page**: Modern responsive dashboard with live network ticker and search (`/`).
-- [x] **Connected to Zcash node**: Live integration with official Zebra (`zebrad`) on `127.0.0.1:8232`.
-- [x] **Used at least 3 RPC methods**: Uses 16 JSON-RPC methods with automatic fallback dialect routing.
-- [x] **Displayed live blockchain data**: Latest height, hash, difficulty, mempool, node version, blockchain info, peer mesh, network hashrate, and sync progress.
