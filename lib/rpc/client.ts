@@ -74,9 +74,33 @@ function envInt(key: string, fallback: number): number {
  * The secret never appears in a thrown message. A caller that mistypes the path
  * needs the path back; nobody needs the cookie echoed into a log.
  */
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+export function resolveCookiePath(rawPath: string): string {
+  if (!rawPath) return "";
+  if (rawPath.startsWith("~/")) {
+    return join(homedir(), rawPath.slice(2));
+  }
+  return rawPath;
+}
+
+export function detectDefaultCookiePath(): string | null {
+  const linuxPath = join(homedir(), ".cache/zebra/.cookie");
+  try {
+    if (statSync(linuxPath).isFile()) return linuxPath;
+  } catch {}
+  const macPath = join(homedir(), "Library/Caches/zebra/.cookie");
+  try {
+    if (statSync(macPath).isFile()) return macPath;
+  } catch {}
+  return null;
+}
+
 let cookieCache: { path: string; mtimeMs: number; encoded: string } | null = null;
 
-function readCookieAuth(path: string, method: string): string {
+function readCookieAuth(rawPath: string, method: string): string {
+  const path = resolveCookiePath(rawPath);
   let mtimeMs: number;
   try {
     mtimeMs = statSync(path).mtimeMs;
@@ -328,8 +352,15 @@ async function postOnce<T>(
   if (config.user || config.password) {
     const encoded = Buffer.from(`${config.user}:${config.password}`).toString("base64");
     headers.Authorization = `Basic ${encoded}`;
-  } else if (config.cookieFile) {
-    headers.Authorization = `Basic ${readCookieAuth(config.cookieFile, method)}`;
+  } else {
+    const cookiePath = config.cookieFile || (config.url && (config.url.includes("127.0.0.1") || config.url.includes("localhost")) ? (detectDefaultCookiePath() ?? "") : "");
+    if (cookiePath) {
+      try {
+        headers.Authorization = `Basic ${readCookieAuth(cookiePath, method)}`;
+      } catch (err) {
+        if (config.cookieFile) throw err;
+      }
+    }
   }
 
   // Last, so a provider that wants its own header wins — including one that wants

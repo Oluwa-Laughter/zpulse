@@ -26,6 +26,7 @@ interface ConnectionData {
     url: string;
     hasApiKey: boolean;
     headerName?: string;
+    cookieFile?: string;
   } | null;
 }
 
@@ -52,6 +53,7 @@ export function ZNodeSwitcherModal({
 
   // Local Node Form State
   const [localUrl, setLocalUrl] = useState("http://127.0.0.1:8232");
+  const [cookieFile, setCookieFile] = useState("");
 
   // 3rd-Party Remote RPC Form State
   const [remoteUrl, setRemoteUrl] = useState("");
@@ -87,6 +89,7 @@ export function ZNodeSwitcherModal({
           } else if (data.session?.url && (data.session.url.includes("127.0.0.1") || data.session.url.includes("localhost"))) {
             setActiveTab("local");
             setLocalUrl(data.session.url);
+            if (data.session.cookieFile) setCookieFile(data.session.cookieFile);
           } else if (data.session?.url) {
             setActiveTab("remote");
             setRemoteUrl(data.session.url);
@@ -111,6 +114,7 @@ export function ZNodeSwitcherModal({
         action: "test",
         mode: "live",
         url: localUrl,
+        cookieFile: cookieFile || undefined,
       };
     } else {
       payload = {
@@ -337,8 +341,8 @@ export function ZNodeSwitcherModal({
                   <div style={{ color: "var(--z-amber)" }}>
                     git clone https://github.com/Oluwa-Laughter/zpulse.git && cd zpulse && npm install
                   </div>
-                  <div style={{ color: "var(--z-text-muted)", margin: "8px 0 4px" }}># 2. Start local Zebra mainnet node (Docker)</div>
-                  <div style={{ color: "var(--z-amber)" }}>npm run node:start</div>
+                  <div style={{ color: "var(--z-text-muted)", margin: "8px 0 4px" }}># 2. Start local Zebra node (Native zebrad)</div>
+                  <div style={{ color: "var(--z-amber)" }}>npm run node:mainnet</div>
                   <div style={{ color: "var(--z-text-muted)", margin: "8px 0 4px" }}># 3. Start local web dashboard</div>
                   <div style={{ color: "var(--z-amber)" }}>npm run dev</div>
                 </div>
@@ -361,22 +365,61 @@ export function ZNodeSwitcherModal({
               <div
                 style={{
                   background: "var(--z-bg-raised)",
-                  padding: 12,
+                  padding: "12px 14px",
                   borderRadius: "var(--z-radius)",
                   border: "1px solid var(--z-line)",
                   fontSize: 12,
                   color: "var(--z-text-muted)",
                 }}
               >
-                <strong>To start your local Zebra node via Docker:</strong>
-                <code style={{ display: "block", marginTop: 4, padding: "4px 8px", background: "var(--z-bg-deep)", borderRadius: 4 }}>
-                  npm run node:start
-                </code>
+                <div style={{ fontWeight: 600, color: "var(--z-text)", marginBottom: 4 }}>Native Zebra Node (Terminal Scripts):</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 6 }}>
+                  <div style={{ background: "var(--z-bg-deep)", padding: "6px 10px", borderRadius: 4, fontFamily: "var(--z-mono)", fontSize: 11 }}>
+                    <span style={{ color: "var(--z-text-dim)" }}># Mainnet (8232):</span><br />
+                    <span style={{ color: "var(--z-amber)" }}>npm run node:mainnet</span>
+                  </div>
+                  <div style={{ background: "var(--z-bg-deep)", padding: "6px 10px", borderRadius: 4, fontFamily: "var(--z-mono)", fontSize: 11 }}>
+                    <span style={{ color: "var(--z-text-dim)" }}># Testnet (18232):</span><br />
+                    <span style={{ color: "var(--z-amber)" }}>npm run node:testnet</span>
+                  </div>
+                </div>
               </div>
             )}
 
             <div>
-              <label className="z-label" htmlFor="local-url-input">Local RPC Endpoint URL</label>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <label className="z-label" htmlFor="local-url-input" style={{ margin: 0 }}>Local RPC Endpoint URL</label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    type="button"
+                    className="z-btn z-btn-xs"
+                    onClick={() => setLocalUrl("http://127.0.0.1:8232")}
+                    style={{
+                      background: localUrl.includes("8232") && !localUrl.includes("18232") ? "var(--z-accent-faint)" : "var(--z-bg-deep)",
+                      borderColor: localUrl.includes("8232") && !localUrl.includes("18232") ? "var(--z-accent)" : "var(--z-line)",
+                      color: localUrl.includes("8232") && !localUrl.includes("18232") ? "var(--z-accent)" : "var(--z-text-muted)",
+                      fontSize: 11,
+                      padding: "2px 8px",
+                    }}
+                  >
+                    Mainnet (8232)
+                  </button>
+                  <button
+                    type="button"
+                    className="z-btn z-btn-xs"
+                    onClick={() => setLocalUrl("http://127.0.0.1:18232")}
+                    style={{
+                      background: localUrl.includes("18232") ? "var(--z-accent-faint)" : "var(--z-bg-deep)",
+                      borderColor: localUrl.includes("18232") ? "var(--z-accent)" : "var(--z-line)",
+                      color: localUrl.includes("18232") ? "var(--z-accent)" : "var(--z-text-muted)",
+                      fontSize: 11,
+                      padding: "2px 8px",
+                    }}
+                  >
+                    Testnet (18232)
+                  </button>
+                </div>
+              </div>
               <input
                 id="local-url-input"
                 type="text"
@@ -384,8 +427,24 @@ export function ZNodeSwitcherModal({
                 value={localUrl}
                 onChange={(e) => setLocalUrl(e.target.value)}
                 placeholder="http://127.0.0.1:8232"
-                style={{ width: "100%", marginTop: 4 }}
+                style={{ width: "100%" }}
               />
+            </div>
+
+            <div>
+              <label className="z-label" htmlFor="local-cookie-input">Cookie Auth File (optional, auto-detected if empty)</label>
+              <input
+                id="local-cookie-input"
+                type="text"
+                className="z-input"
+                value={cookieFile}
+                onChange={(e) => setCookieFile(e.target.value)}
+                placeholder="~/.cache/zebra/.cookie"
+                style={{ width: "100%", marginTop: 4, fontFamily: "var(--z-mono)", fontSize: 12 }}
+              />
+              <span style={{ fontSize: 11, color: "var(--z-text-faint)", marginTop: 2, display: "block" }}>
+                Auto-reads session secret from <code>~/.cache/zebra/.cookie</code> on Linux/macOS.
+              </span>
             </div>
           </div>
         )}

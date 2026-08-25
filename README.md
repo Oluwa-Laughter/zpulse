@@ -16,14 +16,14 @@ ZPulse is a modern, high-performance web application and suite built to interact
 
 - **Live Deployment**: [https://zpulse-observer.vercel.app/](https://zpulse-observer.vercel.app/)
 - **Default Mode**: **Interactive Demo Sandbox** (zero setup, live simulated Zebra mainnet dialect).
-- **Live Node Modes Supported**: Local Zebra Docker node, 3rd-party remote RPC (e.g. QuickNode / NOWNodes / dRPC), and local node tunneling.
+- **Live Node Modes Supported**: Native Zebra binary (`zebrad` on Mainnet/Testnet) and 3rd-party remote RPC (e.g. QuickNode / NOWNodes / dRPC).
 
 ZPulse allows users and judges to switch between **3 connection modes** right from the UI using the **"Switch Node"** button in the header navbar or dashboard:
 
 | Mode | Source | Best For |
 | :--- | :--- | :--- |
 | 🔵 **Interactive Demo Mode** | Built-in Simulated Zebra Mainnet Dialect | Zero-setup testing & live cloud evaluations 24/7. Demonstrates full dialect handling, RPC recipes, privacy mix, and ZIP-208 supply math. |
-| 🟢 **Local Zebra Node** | `http://127.0.0.1:8232` (Docker / Native) | Full node operators running `zebrad` on their local machine with live peer gossip and on-chain verification. |
+| 🟢 **Local Zebra Node** | `http://127.0.0.1:8232` (Native `zebrad`) | Full node operators running `zebrad` on Mainnet (`8232`) or Testnet (`18232`) with live peer gossip and on-chain verification. |
 | 🟣 **3rd-Party Remote RPC** | Any Remote Zcash JSON-RPC Endpoint | Connecting to an always-on remote cloud node using a private API key or custom authentication header. |
 
 > [!TIP]
@@ -41,36 +41,51 @@ cd zpulse
 npm install
 ```
 
-### 2. Start the Official Zebra Node (Docker / Podman)
+### 2. Install & Start Zebra Node (Native Binary — Recommended)
+
+ZPulse natively integrates with `zebrad` on both **Mainnet** and **Testnet** (following the official Zcash Foundation workshop architecture):
+
+#### Option A: Install Native `zebrad` (Fastest with `cargo-binstall`)
 ```bash
-npm run node:start
+npm run node:install
 ```
-*Launches the official `docker.io/zfnd/zebra:latest` container with RPC enabled on `http://127.0.0.1:8232`.*
+*Installs the official prebuilt `zebrad` binary directly to `~/.cargo/bin/zebrad`.*
 
-- Check sync progress & peer logs:
-  ```bash
-  npm run node:logs
-  ```
-- Check container status:
-  ```bash
-  npm run node:status
-  ```
-- Probe RPC capabilities:
-  ```bash
-  npm run probe
-  ```
-
-### 3. Configure Environment
-Copy `.env.local.example` to `.env.local`:
+#### Option B: Start on Mainnet (Port 8232)
 ```bash
-cp .env.local.example .env.local
+npm run node:mainnet
 ```
-Ensure your `.env.local` contains:
-```env
-ZCASH_RPC_URL=http://127.0.0.1:8232
-```
+*Starts `zebrad` syncing Zcash Mainnet with RPC enabled on `http://127.0.0.1:8232` and session cookie authentication.*
 
-### 4. Run Development Server
+#### Option C: Start on Testnet (Port 18232)
+```bash
+npm run node:testnet
+```
+*Starts `zebrad` syncing Zcash Testnet with RPC enabled on `http://127.0.0.1:18232`.*
+
+---
+
+### 3. Interactive CLI Gateway (`toCurl.mjs`)
+
+Test and query your running Zebra node directly from the terminal (matching the workshop `toCurl.sh` foundation):
+```bash
+# Check node health & sync state
+npm run tocurl getblockchaininfo
+
+# Inspect block #1
+npm run tocurl getblock 1 1
+
+# Inspect Sapling/Orchard commitment tree state
+npm run tocurl z_gettreestate 1
+
+# Check connected P2P peers
+npm run tocurl getpeerinfo
+```
+*Automatically resolves session cookie authentication from `~/.cache/zebra/.cookie` or environment variables.*
+
+---
+
+### 4. Start the ZPulse Web Application
 ```bash
 npm run dev
 ```

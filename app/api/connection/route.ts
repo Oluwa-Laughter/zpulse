@@ -83,6 +83,7 @@ export async function POST(req: Request) {
     password?: string;
     headerName?: string;
     apiKey?: string;
+    cookieFile?: string;
     headers?: Record<string, string>;
   };
 
@@ -106,7 +107,7 @@ export async function POST(req: Request) {
     url: body.url ? body.url.trim() : "",
     user: body.user ? body.user.trim() : "",
     password: body.password ? body.password.trim() : "",
-    cookieFile: "",
+    cookieFile: body.cookieFile ? body.cookieFile.trim() : "",
     headers: targetHeaders,
     timeoutMs: 8000,
     jsonrpcVersion: "2.0",
@@ -206,6 +207,7 @@ export async function POST(req: Request) {
       url: targetConfig.url,
       user: targetConfig.user,
       password: targetConfig.password,
+      cookieFile: targetConfig.cookieFile || undefined,
       headerName: body.headerName || "api-key",
       apiKey: body.apiKey || undefined,
       headers: targetHeaders,

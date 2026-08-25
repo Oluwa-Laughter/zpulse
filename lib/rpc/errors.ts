@@ -76,6 +76,8 @@ const TRANSPORT_HINTS: Record<string, string> = {
   ENETUNREACH: "the network is unreachable from this machine.",
   EPERM: "the operating system or a sandbox denied the outbound connection.",
   UND_ERR_CONNECT_TIMEOUT: "the TCP connection timed out before TLS could begin.",
+  UND_ERR_SOCKET:
+    "the node closed the socket immediately. Zebra closes unauthenticated connections when enable_cookie_auth = true; verify ~/.cache/zebra/.cookie exists or supply cookie credentials.",
   CERT_HAS_EXPIRED: "the endpoint's TLS certificate has expired.",
   DEPTH_ZERO_SELF_SIGNED_CERT: "the endpoint presents a self-signed certificate.",
   UNABLE_TO_VERIFY_LEAF_SIGNATURE: "the endpoint's TLS certificate chain could not be verified.",

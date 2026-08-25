@@ -11,10 +11,14 @@
     "verify": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-extensions.mjs scripts/verify.mjs",
     "probe": "node scripts/probe.mjs",
     "poll": "node scripts/poll.mjs",
-    "node:start": "docker start zpulse-zebrad 2>/dev/null || docker run -d --name zpulse-zebrad -p 8232:8232 -p 8233:8233 -e ZEBRA_RPC__LISTEN_ADDR=0.0.0.0:8232 -e ZEBRA_RPC__ENABLE_COOKIE_AUTH=false -e ZEBRA_CONSENSUS__CHECKPOINT_SYNC=true -v zebrad-data:/home/zebra/.cache/zebra docker.io/zfnd/zebra:latest zebrad start",
-    "node:stop": "docker stop zpulse-zebrad 2>/dev/null && docker rm zpulse-zebrad 2>/dev/null",
-    "node:logs": "docker logs -f zpulse-zebrad",
-    "node:status": "docker ps --filter name=zpulse-zebrad"
+    "tocurl": "node scripts/toCurl.mjs",
+    "node:mainnet": "./scripts/zebrad.sh mainnet",
+    "node:testnet": "./scripts/zebrad.sh testnet",
+    "node:install": "./scripts/zebrad.sh install",
+    "node:init": "./scripts/zebrad.sh init",
+    "node:status": "./scripts/zebrad.sh status",
+    "node:stop": "./scripts/zebrad.sh stop",
+    "node:start": "./scripts/zebrad.sh mainnet"
   },
   "dependencies": {
     "next": "14.2.35",
