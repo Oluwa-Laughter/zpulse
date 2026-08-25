@@ -69,7 +69,8 @@ const TRANSPORT_HINTS: Record<string, string> = {
   EAI_AGAIN: "the DNS lookup failed temporarily — the resolver is unreachable, or rate-limiting you.",
   ECONNREFUSED:
     "nothing accepted the connection. For a local node, check it is running and its RPC port is bound; on a restricted network, check outbound access is allowed.",
-  ECONNRESET: "the connection was closed mid-request, usually by a proxy or firewall in between.",
+  ECONNRESET:
+    "the connection was closed mid-request. For a local container, ensure Zebra's RPC is bound to 0.0.0.0:8232 (zebrad.toml); on a remote network, check for a proxy or firewall.",
   ETIMEDOUT: "the connection attempt timed out before the node answered.",
   EHOSTUNREACH: "there is no route to that host.",
   ENETUNREACH: "the network is unreachable from this machine.",

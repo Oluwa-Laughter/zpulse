@@ -1,0 +1,24 @@
+# Zebra Full Node Configuration for ZPulse
+# Configured for Zcash Mainnet JSON-RPC on port 8232
+
+[network]
+network = "Mainnet"
+listen_addr = "0.0.0.0:8233"
+
+[rpc]
+# Listen on 0.0.0.0 so Docker port mapping from 127.0.0.1:8232 works without ECONNRESET
+listen_addr = "0.0.0.0:8232"
+# Allow direct JSON-RPC calls without local cookie file permission issues
+enable_cookie_auth = false
+
+[consensus]
+# Fast checkpoint verification of historical blocks
+checkpoint_sync = true
+
+[state]
+ephemeral = false
+cache_dir = "/home/zebra/.cache/zebra"
+
+[tracing]
+use_color = true
+filter = "info"

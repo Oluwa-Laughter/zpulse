@@ -1,35 +1,17 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  # Official Zebra Node from the Zcash Foundation (zebrad)
   zebrad:
     image: docker.io/zfnd/zebra:latest
     container_name: zpulse-zebrad
+    restart: unless-stopped
     ports:
-      - "8232:8232" # JSON-RPC port
-      - "8233:8233" # Zcash P2P network port
-    environment:
-      - ZEBRA_RPC__LISTEN_ADDR=0.0.0.0:8232
-      - ZEBRA_RPC__ENABLE_COOKIE_AUTH=false
+      - "8232:8232" # Zcash JSON-RPC
+      - "8233:8233" # Zcash Mainnet P2P
     volumes:
+      - ./zebrad.toml:/etc/zebrad.toml:ro
       - zebrad-data:/home/zebra/.cache/zebra
-    restart: unless-stopped
-
-  # ZPulse Network Observatory App
-  zpulse:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: zpulse-app
-    ports:
-      - "3000:3000"
-    environment:
-      - ZCASH_RPC_URL=http://zebrad:8232
-      - ZCASH_RPC_TIMEOUT_MS=10000
-    depends_on:
-      - zebrad
-    restart: unless-stopped
+    command: ["zebrad", "start", "--config", "/etc/zebrad.toml"]
 
 volumes:
   zebrad-data:
-
