@@ -90,7 +90,35 @@ export function demoTipHeight(nowMs: number = Date.now()): number {
 
 function demoBlockTime(height: number, nowMs: number = Date.now()): number {
   const tip = demoTipHeight(nowMs);
-  return Math.floor(nowMs / 1000) - (tip - height) * TARGET_SPACING_S;
+  // For blocks in the active rolling window near the tip (e.g. within 2000 blocks)
+  if (height >= tip - 2000) {
+    return Math.floor(nowMs / 1000) - (tip - height) * TARGET_SPACING_S;
+  }
+  // For historical blocks, use exact canonical Zcash network epoch schedule
+  if (height === 0) return 1477641360; // Genesis (Oct 28, 2016 07:56:00 UTC)
+  if (height === 1) return 1477671596; // Block 1 (Oct 28, 2016 16:19:56 UTC)
+  if (height >= 2726400) {
+    // NU6 era (Nov 23, 2024 onward) @ 75s/block
+    return 1732353782 + (height - 2726400) * 75;
+  }
+  if (height >= 1687104) {
+    // NU5 / Orchard era (May 31, 2022) @ 75s/block
+    return 1653994326 + (height - 1687104) * 75;
+  }
+  if (height >= 1046400) {
+    // Canopy era (Nov 18, 2020) @ 75s/block
+    return 1605697669 + (height - 1046400) * 75;
+  }
+  if (height >= 653600) {
+    // Blossom era (Dec 11, 2019) @ 75s/block
+    return 1576082260 + (height - 653600) * 75;
+  }
+  if (height >= 419200) {
+    // Sapling era (Oct 28, 2018) @ 150s/block
+    return 1540779337 + (height - 419200) * 150;
+  }
+  // Sprout & Overwinter era (Oct 2016 - Oct 2018) @ 150s/block
+  return 1477641360 + height * 150;
 }
 
 /* ── deterministic pseudo-randomness ─────────────────────────────────────── */

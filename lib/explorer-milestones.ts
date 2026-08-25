@@ -34,10 +34,10 @@ export const NETWORK_MILESTONES: Record<number, Milestone> = {
   },
   1: {
     height: 1,
-    hash: "000710f40da489416460fdb51d0daecd3880c36725b9b181b0f11612e3a07da9",
-    name: "Sprout Shielded Era",
-    era: "Sprout",
-    time: 1477641510,
+    hash: "0007bc227e1c57a4a70e237cad00e7b7ce565155ab49166bc57397a26d339283",
+    name: "Block #1",
+    era: "Sprout (Genesis Era)",
+    time: 1477671596,
     difficulty: 1.0,
     pools: [
       { id: "transparent", chainValue: 0.000625, monitored: true },
@@ -46,10 +46,10 @@ export const NETWORK_MILESTONES: Record<number, Milestone> = {
   },
   347500: {
     height: 347500,
-    hash: "000000000109ae93f2f01f8aa69b4e7ceac81ad4eb5c66d2139031c26b5d95e0",
+    hash: "0000000003761c0d0c3974b54bdb425613bbb1eaadd6e70b764de82f195ea243",
     name: "Overwinter Upgrade",
     era: "Overwinter",
-    time: 1530001992,
+    time: 1529977051,
     difficulty: 12450000,
     pools: [
       { id: "transparent", chainValue: 3950000, monitored: true },
@@ -58,10 +58,10 @@ export const NETWORK_MILESTONES: Record<number, Milestone> = {
   },
   419200: {
     height: 419200,
-    hash: "0000000001ba976860abced704709572d8d56fa241e34b45c6b43224fdd3ab38",
+    hash: "00000000025a57200d898ac7f21e26bf29028bbe96ec46e05b2c17cc9db9e4f3",
     name: "Sapling Activation",
     era: "Sapling",
-    time: 1540788647,
+    time: 1540779337,
     difficulty: 19800000,
     pools: [
       { id: "transparent", chainValue: 4780000, monitored: true },

@@ -62,6 +62,14 @@ export function ZNodeSwitcherModal({
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [saving, setSaving] = useState(false);
+  const [isCloud, setIsCloud] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const host = window.location.hostname;
+      setIsCloud(!host.includes("localhost") && !host.includes("127.0.0.1") && !host.includes("0.0.0.0"));
+    }
+  }, []);
 
   // Fetch current active connection on open
   useEffect(() => {
@@ -295,12 +303,60 @@ export function ZNodeSwitcherModal({
         {/* TAB 2: LOCAL NODE */}
         {activeTab === "local" && (
           <div className="z-stack" style={{ gap: 12 }}>
-            <div style={{ background: "var(--z-bg-raised)", padding: 12, borderRadius: "var(--z-radius)", border: "1px solid var(--z-line)", fontSize: 12, color: "var(--z-text-muted)" }}>
-              <strong>To start your local Zebra node via Docker:</strong>
-              <code style={{ display: "block", marginTop: 4, padding: "4px 8px", background: "var(--z-bg-deep)", borderRadius: 4 }}>
-                npm run node:start
-              </code>
-            </div>
+            {isCloud ? (
+              <div
+                style={{
+                  background: "rgba(242, 183, 33, 0.08)",
+                  border: "1px solid rgba(242, 183, 33, 0.25)",
+                  borderRadius: "var(--z-radius)",
+                  padding: "12px 14px",
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, fontWeight: 600, color: "var(--z-amber)" }}>
+                  <HiOutlineExclamationCircle style={{ fontSize: 16 }} />
+                  <span>Cloud Deployment Notice ({typeof window !== "undefined" ? window.location.hostname : "Cloud"})</span>
+                </div>
+                <p style={{ margin: "0 0 6px", color: "var(--z-text)" }}>
+                  Because this app is hosted on Vercel cloud servers, it cannot directly reach <code>127.0.0.1</code> on your physical computer.
+                </p>
+                <div style={{ color: "var(--z-text-muted)" }}>
+                  <strong>To connect your local Zebra node to this cloud link:</strong>
+                  <ol style={{ margin: "6px 0 0 16px", padding: 0 }}>
+                    <li>
+                      Run a secure tunnel locally:{" "}
+                      <code style={{ background: "var(--z-bg-deep)", padding: "2px 6px", borderRadius: 3 }}>
+                        npx localtunnel --port 8232
+                      </code>{" "}
+                      (or <code>ngrok http 8232</code>)
+                    </li>
+                    <li>
+                      Switch to the <strong>3rd-Party Remote RPC</strong> tab and paste your tunnel URL (e.g. <code>https://...loca.lt</code>).
+                    </li>
+                  </ol>
+                  <p style={{ margin: "8px 0 0", fontSize: 11.5 }}>
+                    <em>Alternatively, run ZPulse locally with <code>npm run dev</code> for zero-config localhost integration.</em>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div
+                style={{
+                  background: "var(--z-bg-raised)",
+                  padding: 12,
+                  borderRadius: "var(--z-radius)",
+                  border: "1px solid var(--z-line)",
+                  fontSize: 12,
+                  color: "var(--z-text-muted)",
+                }}
+              >
+                <strong>To start your local Zebra node via Docker:</strong>
+                <code style={{ display: "block", marginTop: 4, padding: "4px 8px", background: "var(--z-bg-deep)", borderRadius: 4 }}>
+                  npm run node:start
+                </code>
+              </div>
+            )}
 
             <div>
               <label className="z-label" htmlFor="local-url-input">Local RPC Endpoint URL</label>

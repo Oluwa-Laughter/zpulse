@@ -102,6 +102,11 @@ export function formatDuration(seconds: number | null | undefined): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ${minutes % 60}m`;
   const days = Math.floor(hours / 24);
+  if (days >= 365) {
+    const years = Math.floor(days / 365);
+    const remDays = days % 365;
+    return `${years}y ${remDays}d`;
+  }
   return `${days}d ${hours % 24}h`;
 }
 
@@ -114,7 +119,9 @@ export function titleCasePoolId(id: string): string {
 /** Format unix seconds into standard UTC date/time string: "2024-11-23 09:23:02 UTC" */
 export function formatUtcDateTime(unixSeconds: number | null | undefined): string {
   if (unixSeconds === null || unixSeconds === undefined || !Number.isFinite(unixSeconds)) return "—";
-  const d = new Date(unixSeconds * 1000);
+  const ms = unixSeconds > 1e11 ? unixSeconds : unixSeconds * 1000;
+  const d = new Date(ms);
+  if (isNaN(d.getTime())) return "—";
   const year = d.getUTCFullYear();
   const month = String(d.getUTCMonth() + 1).padStart(2, "0");
   const day = String(d.getUTCDate()).padStart(2, "0");

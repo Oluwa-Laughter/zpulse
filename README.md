@@ -14,6 +14,10 @@ ZPulse is a modern, high-performance web application and suite built to interact
 
 ## 🌐 3 Flexible Connection Modes (Switch in 1 Click)
 
+- **Live Deployment**: [https://zpulse-observer.vercel.app/](https://zpulse-observer.vercel.app/)
+- **Default Mode**: **Interactive Demo Sandbox** (zero setup, live simulated Zebra mainnet dialect).
+- **Live Node Modes Supported**: Local Zebra Docker node, 3rd-party remote RPC (e.g. QuickNode / NOWNodes / dRPC), and local node tunneling.
+
 ZPulse allows users and judges to switch between **3 connection modes** right from the UI using the **"Switch Node"** button in the header navbar or dashboard:
 
 | Mode | Source | Best For |

@@ -22,14 +22,13 @@ import { poolColor } from "@/components/poolColors";
 import type { ExplorerBlockData, ExplorerTxData } from "@/lib/data";
 
 const QUICK_JUMPS = [
-  { label: "Modern Tip (2026)", height: 3400000 },
-  { label: "NU6 / Lockbox (#2.72M)", height: 2726400 },
-  { label: "NU5 / Orchard (#1.68M)", height: 1687104 },
-  { label: "Canopy (#1.04M)", height: 1046400 },
-  { label: "Blossom (#653k)", height: 653600 },
-  { label: "Sapling (#419k)", height: 419200 },
-  { label: "Local Node Synced (#106k)", height: 106556 },
   { label: "Genesis (#0)", height: 0 },
+  { label: "Overwinter (#347.5k)", height: 347500 },
+  { label: "Sapling (#419k)", height: 419200 },
+  { label: "Blossom (#653k)", height: 653600 },
+  { label: "Canopy (#1.04M)", height: 1046400 },
+  { label: "NU5 / Orchard (#1.68M)", height: 1687104 },
+  { label: "NU6 / Lockbox (#2.72M)", height: 2726400 },
 ];
 
 export default function ExplorerPage() {

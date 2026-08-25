@@ -134,6 +134,19 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
+    const isCloudEnv = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY || process.env.RENDER);
+    const isLocalhostTarget = targetConfig.url && (targetConfig.url.includes("127.0.0.1") || targetConfig.url.includes("localhost"));
+
+    if (isCloudEnv && isLocalhostTarget) {
+      return NextResponse.json({
+        error: {
+          kind: "CloudToLocalhostBlocked",
+          message: "Vercel cloud servers cannot connect directly to 127.0.0.1 on your local machine. To connect your local Zebra node to this cloud deployment, tunnel it via 'ngrok http 8232' (or 'npx localtunnel --port 8232') and enter your tunnel HTTPS URL in the Remote RPC tab, or run ZPulse locally with 'npm run dev'.",
+          endpoint: describeEndpoint(targetConfig),
+        },
+      }, { status: 400 });
+    }
+
     try {
       const start = Date.now();
       const response = await rpcCallTimed<Record<string, unknown>>("getblockchaininfo", [], targetConfig);

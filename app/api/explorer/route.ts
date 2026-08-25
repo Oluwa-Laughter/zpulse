@@ -51,15 +51,15 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // If no target block specified, default to modern network tip
+  // If no target block specified, default to connected node's current synced tip
   if (targetBlock === null || targetBlock === "") {
     const chainTip = await getChain();
-    if (chainTip.data?.estimatedHeight && chainTip.data.estimatedHeight > (chainTip.data.height || 0)) {
-      targetBlock = chainTip.data.estimatedHeight;
-    } else if (chainTip.data?.height) {
+    if (chainTip.data?.height !== undefined && chainTip.data?.height !== null) {
       targetBlock = chainTip.data.height;
+    } else if (chainTip.data?.estimatedHeight) {
+      targetBlock = chainTip.data.estimatedHeight;
     } else {
-      targetBlock = 2726400; // Modern NU6 Halving baseline
+      targetBlock = 0;
     }
   }
 
