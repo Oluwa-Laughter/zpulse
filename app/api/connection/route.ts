@@ -140,8 +140,8 @@ export async function POST(req: Request) {
     if (isCloudEnv && isLocalhostTarget) {
       return NextResponse.json({
         error: {
-          kind: "CloudToLocalhostBlocked",
-          message: "Vercel cloud servers cannot connect directly to 127.0.0.1 on your local machine. To connect your local Zebra node to this cloud deployment, tunnel it via 'ngrok http 8232' (or 'npx localtunnel --port 8232') and enter your tunnel HTTPS URL in the Remote RPC tab, or run ZPulse locally with 'npm run dev'.",
+          kind: "CloudToLocalhostNotice",
+          message: "To connect directly to a live local Zebra node on 127.0.0.1:8232, please clone the repository and run ZPulse locally following the GitHub setup guide: https://github.com/Oluwa-Laughter/zpulse#quick-start-running-locally-with-live-zebra-node (On this live cloud link, use the Interactive Demo or 3rd-Party Remote RPC mode).",
           endpoint: describeEndpoint(targetConfig),
         },
       }, { status: 400 });

@@ -306,38 +306,55 @@ export function ZNodeSwitcherModal({
             {isCloud ? (
               <div
                 style={{
-                  background: "rgba(242, 183, 33, 0.08)",
-                  border: "1px solid rgba(242, 183, 33, 0.25)",
+                  background: "var(--z-bg-raised)",
+                  border: "1px solid var(--z-line)",
                   borderRadius: "var(--z-radius)",
-                  padding: "12px 14px",
-                  fontSize: 12,
+                  padding: "14px 16px",
+                  fontSize: 12.5,
                   lineHeight: 1.5,
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, fontWeight: 600, color: "var(--z-amber)" }}>
-                  <HiOutlineExclamationCircle style={{ fontSize: 16 }} />
-                  <span>Cloud Deployment Notice ({typeof window !== "undefined" ? window.location.hostname : "Cloud"})</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontWeight: 600, color: "var(--z-amber)" }}>
+                  <HiOutlineComputerDesktop style={{ fontSize: 18 }} />
+                  <span style={{ fontSize: 13.5 }}>Running with a Local Zebra Node</span>
                 </div>
-                <p style={{ margin: "0 0 6px", color: "var(--z-text)" }}>
-                  Because this app is hosted on Vercel cloud servers, it cannot directly reach <code>127.0.0.1</code> on your physical computer.
+                <p style={{ margin: "0 0 10px", color: "var(--z-text)", fontSize: 13 }}>
+                  To connect directly to your local Zebra node (<code>127.0.0.1:8232</code>), clone the repo and run ZPulse locally on your machine:
                 </p>
-                <div style={{ color: "var(--z-text-muted)" }}>
-                  <strong>To connect your local Zebra node to this cloud link:</strong>
-                  <ol style={{ margin: "6px 0 0 16px", padding: 0 }}>
-                    <li>
-                      Run a secure tunnel locally:{" "}
-                      <code style={{ background: "var(--z-bg-deep)", padding: "2px 6px", borderRadius: 3 }}>
-                        npx localtunnel --port 8232
-                      </code>{" "}
-                      (or <code>ngrok http 8232</code>)
-                    </li>
-                    <li>
-                      Switch to the <strong>3rd-Party Remote RPC</strong> tab and paste your tunnel URL (e.g. <code>https://...loca.lt</code>).
-                    </li>
-                  </ol>
-                  <p style={{ margin: "8px 0 0", fontSize: 11.5 }}>
-                    <em>Alternatively, run ZPulse locally with <code>npm run dev</code> for zero-config localhost integration.</em>
-                  </p>
+                <div
+                  style={{
+                    background: "var(--z-bg-deep)",
+                    padding: "10px 12px",
+                    borderRadius: "var(--z-radius)",
+                    border: "1px solid var(--z-line)",
+                    fontFamily: "var(--z-mono)",
+                    fontSize: 11.5,
+                    color: "var(--z-text)",
+                    marginBottom: 12,
+                  }}
+                >
+                  <div style={{ color: "var(--z-text-muted)", marginBottom: 4 }}># 1. Clone repo & install</div>
+                  <div style={{ color: "var(--z-amber)" }}>
+                    git clone https://github.com/Oluwa-Laughter/zpulse.git && cd zpulse && npm install
+                  </div>
+                  <div style={{ color: "var(--z-text-muted)", margin: "8px 0 4px" }}># 2. Start local Zebra mainnet node (Docker)</div>
+                  <div style={{ color: "var(--z-amber)" }}>npm run node:start</div>
+                  <div style={{ color: "var(--z-text-muted)", margin: "8px 0 4px" }}># 3. Start local web dashboard</div>
+                  <div style={{ color: "var(--z-amber)" }}>npm run dev</div>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                  <a
+                    href="https://github.com/Oluwa-Laughter/zpulse#quick-start-running-locally-with-live-zebra-node"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="z-btn z-btn-sm z-primary"
+                    style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
+                  >
+                    <span>View GitHub Setup Guide ↗</span>
+                  </a>
+                  <span style={{ fontSize: 11.5, color: "var(--z-text-dim)" }}>
+                    On this live cloud link, use <strong>Interactive Demo</strong> or <strong>3rd-Party Remote RPC</strong>.
+                  </span>
                 </div>
               </div>
             ) : (
