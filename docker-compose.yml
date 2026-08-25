@@ -8,10 +8,13 @@ services:
     ports:
       - "8232:8232" # Zcash JSON-RPC
       - "8233:8233" # Zcash Mainnet P2P
+    environment:
+      - ZEBRA_RPC__LISTEN_ADDR=0.0.0.0:8232
+      - ZEBRA_RPC__ENABLE_COOKIE_AUTH=false
+      - ZEBRA_CONSENSUS__CHECKPOINT_SYNC=true
     volumes:
-      - ./zebrad.toml:/etc/zebrad.toml:ro
       - zebrad-data:/home/zebra/.cache/zebra
-    command: ["zebrad", "start", "--config", "/etc/zebrad.toml"]
+    command: ["zebrad", "start"]
 
 volumes:
   zebrad-data:

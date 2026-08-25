@@ -11,10 +11,10 @@
     "verify": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/ts-extensions.mjs scripts/verify.mjs",
     "probe": "node scripts/probe.mjs",
     "poll": "node scripts/poll.mjs",
-    "node:start": "docker compose up -d zebrad 2>/dev/null || docker run -d --name zpulse-zebrad -p 8232:8232 -p 8233:8233 -v \"$(pwd)/zebrad.toml\":/etc/zebrad.toml:ro -v zebrad-data:/home/zebra/.cache/zebra docker.io/zfnd/zebra:latest zebrad start --config /etc/zebrad.toml",
-    "node:stop": "docker compose down 2>/dev/null || (docker stop zpulse-zebrad 2>/dev/null && docker rm zpulse-zebrad 2>/dev/null)",
-    "node:logs": "docker compose logs -f zebrad 2>/dev/null || docker logs -f zpulse-zebrad",
-    "node:status": "docker compose ps 2>/dev/null || docker ps --filter name=zpulse-zebrad"
+    "node:start": "docker start zpulse-zebrad 2>/dev/null || docker run -d --name zpulse-zebrad -p 8232:8232 -p 8233:8233 -e ZEBRA_RPC__LISTEN_ADDR=0.0.0.0:8232 -e ZEBRA_RPC__ENABLE_COOKIE_AUTH=false -e ZEBRA_CONSENSUS__CHECKPOINT_SYNC=true -v zebrad-data:/home/zebra/.cache/zebra docker.io/zfnd/zebra:latest zebrad start",
+    "node:stop": "docker stop zpulse-zebrad 2>/dev/null && docker rm zpulse-zebrad 2>/dev/null",
+    "node:logs": "docker logs -f zpulse-zebrad",
+    "node:status": "docker ps --filter name=zpulse-zebrad"
   },
   "dependencies": {
     "next": "14.2.35",
