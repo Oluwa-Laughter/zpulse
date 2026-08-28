@@ -1,8 +1,10 @@
-# ZPulse ⚡ — Zcash Network & Shielded Supply Intelligence
+<h1 align='center'>⚡ ZPulse </h1>  
+
+## A Zcash Network and Shielded Supply Intelligence
 
 > Real-time network observatory, turnstile migration tracker, and JSON-RPC developer toolkit built on the official Zcash Foundation Zebra node (`zebrad`).
 
-**Live Deployment**: [https://zpulse-observer.vercel.app/](https://zpulse-observer.vercel.app/)
+**Live Deployment**: [https://zpulse-v1.vercel.app/](https://zpulse-v1.vercel.app/)
 
 ---
 
@@ -22,7 +24,7 @@ Switch between modes anytime using the **"Switch Node"** button in the header na
 
 | Mode | Target | Description |
 | :--- | :--- | :--- |
-| 🔵 **Interactive Demo** | Synthetic Zebra Mainnet | **Zero-setup evaluation** — ideal for judges on cloud deployments. |
+| 🔵 **Interactive Demo** | Synthetic Zebra Mainnet | **Zero-setup evaluation**|
 | 🟢 **Local Zebra Node** | `127.0.0.1:8232` (Mainnet)<br>`127.0.0.1:18232` (Testnet) | Direct connection to native `zebrad` with auto-detected session cookie auth (`~/.cache/zebra/.cookie`). |
 | 🟣 **3rd-Party Remote RPC** | Any Remote Endpoint | Connect via API key/token, secured in server-side `HttpOnly` session cookies. |
 
