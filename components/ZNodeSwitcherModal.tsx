@@ -73,6 +73,16 @@ export function ZNodeSwitcherModal({
     }
   }, []);
 
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   // Fetch current active connection on open
   useEffect(() => {
     if (!isOpen) return;
@@ -172,6 +182,7 @@ export function ZNodeSwitcherModal({
         action: "save",
         mode: "live",
         url: localUrl,
+        cookieFile: cookieFile || undefined,
       };
     } else {
       payload = {

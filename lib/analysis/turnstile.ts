@@ -282,10 +282,12 @@ export function summarizeTurnstile(
       if (delta > 0) inflowZec += delta;
       else if (delta < 0) outflowZec += -delta;
       if (delta !== 0) activeBlocks += 1;
-      running += delta;
+      running = Math.round((running + delta) * 1e8) / 1e8;
       cumulative.push(running);
     }
 
+    inflowZec = Math.round(inflowZec * 1e8) / 1e8;
+    outflowZec = Math.round(outflowZec * 1e8) / 1e8;
     const netZec = running;
     return {
       id,

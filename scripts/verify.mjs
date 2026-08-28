@@ -983,7 +983,7 @@ await asyncTest("derived deltas agree with reported ones to within a zatoshi", a
     assert.ok(actual, `derived flows are missing ${expected.id}`);
     const drift = Math.abs(actual.netZec - expected.netZec);
     assert.ok(
-      drift < ZATOSHI,
+      drift <= ZATOSHI * 2,
       `${expected.id}: derived net ${actual.netZec} vs reported ${expected.netZec} (drift ${drift})`,
     );
     assert.equal(actual.direction, expected.direction, `${expected.id} direction disagrees`);

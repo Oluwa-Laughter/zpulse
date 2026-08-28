@@ -29,6 +29,8 @@ import {
   HiOutlineShieldCheck,
   HiOutlineLink,
   HiOutlineClock,
+  HiOutlineDocumentDuplicate,
+  HiCheck,
 } from "react-icons/hi2";
 import { ZJsonView } from "@/components/ZJsonView";
 import { ZBadge, ZCard, ZDemoBanner, ZErrorNote, ZStat } from "@/components/ZUI";
@@ -476,14 +478,40 @@ function StepView({
   }
 
   const { call } = outcome;
+  const [copiedCurl, setCopiedCurl] = useState(false);
+
+  const handleCopyCurl = () => {
+    const payload = JSON.stringify({
+      jsonrpc: "2.0",
+      id: "zpulse",
+      method: call.method,
+      params: call.params,
+    });
+    const curlCmd = `curl --location --request POST 'http://127.0.0.1:8232' \\\n--header 'Content-Type: application/json' \\\n--data-raw '${payload.replace(/'/g, "'\\''")}'`;
+    void navigator.clipboard.writeText(curlCmd);
+    setCopiedCurl(true);
+    setTimeout(() => setCopiedCurl(false), 2000);
+  };
 
   return (
     <div className="z-step">
-      <div className="z-step-head">
-        {stepLabel ? <span className="z-label">{stepLabel}</span> : null}
-        <b>{call.method}</b>
-        {call.ok ? <ZBadge tone="ok">200 ok</ZBadge> : <ZBadge tone="warn">node returned an error</ZBadge>}
-        {call.latencyMs !== null ? <ZBadge>{call.latencyMs}ms</ZBadge> : null}
+      <div className="z-step-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <div className="z-row" style={{ gap: 8, alignItems: "center" }}>
+          {stepLabel ? <span className="z-label">{stepLabel}</span> : null}
+          <b>{call.method}</b>
+          {call.ok ? <ZBadge tone="ok">200 ok</ZBadge> : <ZBadge tone="warn">node returned an error</ZBadge>}
+          {call.latencyMs !== null ? <ZBadge>{call.latencyMs}ms</ZBadge> : null}
+        </div>
+        <button
+          type="button"
+          className="z-btn z-btn-sm"
+          onClick={handleCopyCurl}
+          style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+          title="Copy command formatted as cURL"
+        >
+          {copiedCurl ? <HiCheck style={{ color: "var(--z-good)" }} /> : <HiOutlineDocumentDuplicate />}
+          <span>{copiedCurl ? "Copied cURL" : "Copy cURL"}</span>
+        </button>
       </div>
 
       {outcome.use ? (

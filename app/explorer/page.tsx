@@ -47,7 +47,7 @@ function ExplorerContent() {
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [activeQuery, setActiveQuery] = useState(initialQuery);
   const [selectedTx, setSelectedTx] = useState<string | null>(null);
-  const [copiedHash, setCopiedHash] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const endpointUrl = activeQuery ? `/api/explorer?q=${encodeURIComponent(activeQuery)}` : "/api/explorer";
   const envelope = useEnvelope<ExplorerBlockData & ExplorerTxData & { isTx?: boolean }>(endpointUrl, 0);
@@ -90,10 +90,10 @@ function ExplorerContent() {
     }
   };
 
-  const handleCopy = (text: string) => {
+  const handleCopy = (id: string, text: string) => {
     void navigator.clipboard.writeText(text);
-    setCopiedHash(true);
-    setTimeout(() => setCopiedHash(false), 2000);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
   return (
@@ -185,11 +185,14 @@ function ExplorerContent() {
               <button
                 type="button"
                 className="z-btn z-btn-sm"
-                onClick={() => handleCopy(data.tx.txid || data.tx.hash || "")}
+                onClick={() => {
+                  const id = data.tx.txid || data.tx.hash || "";
+                  handleCopy(id, id);
+                }}
                 style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
               >
-                {copiedHash ? <HiCheck style={{ color: "var(--z-good)" }} /> : <HiOutlineDocumentDuplicate />}
-                <span>{copiedHash ? "Copied" : "Copy TxID"}</span>
+                {copiedId === (data.tx.txid || data.tx.hash) ? <HiCheck style={{ color: "var(--z-good)" }} /> : <HiOutlineDocumentDuplicate />}
+                <span>{copiedId === (data.tx.txid || data.tx.hash) ? "Copied" : "Copy TxID"}</span>
               </button>
             }
             meta={envelope.meta}
@@ -277,10 +280,10 @@ function ExplorerContent() {
               <button
                 type="button"
                 className="z-btn z-btn-sm"
-                onClick={() => handleCopy(block.hash)}
+                onClick={() => handleCopy("block-hash", block.hash)}
                 style={{ marginLeft: 8, flexShrink: 0 }}
               >
-                {copiedHash ? "Copied" : "Copy"}
+                {copiedId === "block-hash" ? "Copied" : "Copy"}
               </button>
             </div>
           </ZCard>
@@ -356,10 +359,10 @@ function ExplorerContent() {
                           <button
                             type="button"
                             className="z-btn z-btn-sm"
-                            onClick={() => txItem.txid && handleCopy(txItem.txid)}
+                            onClick={() => txItem.txid && handleCopy(txItem.txid, txItem.txid)}
                             title="Copy TxID"
                           >
-                            Copy TxID
+                            {copiedId === txItem.txid ? "Copied" : "Copy TxID"}
                           </button>
                           <button
                             type="button"
