@@ -15,6 +15,7 @@
 3. 🔍 **Block Explorer** (`/explorer`): Inspect on-chain blocks and milestones from Genesis `#0` to modern `#3.4M+` with raw transaction decoding and commitment tree states.
 4. 🦓 **Zebra Node Monitor** (`/node`): Sync status HUD, P2P peer mesh topology, ping latencies, mempool size, and mining hashrate.
 5. ⚡ **RPC Playground** (`/rpc`): Interactive 1-click execution of 16 read-only JSON-RPC methods, recipe workflows, and copyable `curl` exports.
+6. 📱 **Responsive Mobile UX**: Full mobile navigation drawer, touch-friendly controls, and adaptive data grids across phones, tablets, and desktops.
 
 ---
 
