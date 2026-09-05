@@ -493,13 +493,26 @@ function StepView({
     setTimeout(() => setCopiedCurl(false), 2000);
   };
 
+  const isUnsupported =
+    !call.ok &&
+    (call.error?.kind === "RpcUnsupportedError" ||
+      call.error?.message?.includes("-32601") ||
+      call.error?.message?.toLowerCase().includes("not implement") ||
+      call.error?.message?.toLowerCase().includes("method not found"));
+
   return (
     <div className="z-step">
       <div className="z-step-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <div className="z-row" style={{ gap: 8, alignItems: "center" }}>
           {stepLabel ? <span className="z-label">{stepLabel}</span> : null}
           <b>{call.method}</b>
-          {call.ok ? <ZBadge tone="ok">200 ok</ZBadge> : <ZBadge tone="warn">node returned an error</ZBadge>}
+          {call.ok ? (
+            <ZBadge tone="ok">200 ok</ZBadge>
+          ) : isUnsupported ? (
+            <ZBadge tone="warn">Unsupported on Node (−32601)</ZBadge>
+          ) : (
+            <ZBadge tone="warn">node returned an error</ZBadge>
+          )}
           {call.latencyMs !== null ? <ZBadge>{call.latencyMs}ms</ZBadge> : null}
         </div>
         <button
@@ -530,6 +543,15 @@ function StepView({
       </div>
       {call.ok ? (
         <ZJsonView value={call.result} maxHeight={380} />
+      ) : isUnsupported ? (
+        <div className="z-banner" style={{ margin: 0, borderLeft: "3px solid var(--z-warn)" }}>
+          <div>
+            <strong>Method Unsupported on this node profile (−32601).</strong>
+            <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--z-text-muted)" }}>
+              The connected node does not implement <code>{call.method}</code>. This is normal for lightweight remote endpoints or older Zebra versions. ZPulse observatory panels automatically route around this with consensus fallbacks.
+            </p>
+          </div>
+        </div>
       ) : (
         <div className="z-banner z-bad" style={{ margin: 0 }}>
           <strong>{call.error?.kind ?? "Error"}.</strong> {call.error?.message}

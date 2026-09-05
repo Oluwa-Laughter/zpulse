@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { rpcCallTimed, describeEndpoint, readRpcConfig, type RpcConfig } from "@/lib/rpc/client";
 import { clearCache } from "@/lib/cache";
+import { resetCapabilityCache } from "@/lib/rpc/capabilities";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -55,7 +56,7 @@ export async function GET() {
         {
           id: "demo",
           name: "Interactive Demo Sandbox",
-          description: "Zero credentials or local setup needed. Runs built-in simulated Zebra mainnet dialect.",
+          description: "Runs built-in simulated Zebra mainnet dialect (offline test fixture).",
         },
         {
           id: "local",
@@ -181,6 +182,7 @@ export async function POST(req: Request) {
   // 2. Action: Save Connection Configuration to Secure HttpOnly Session Cookie
   if (action === "save") {
     clearCache();
+    resetCapabilityCache();
     const cookieStore = cookies();
 
     if (body.mode === "demo") {
@@ -235,6 +237,7 @@ export async function POST(req: Request) {
   // 3. Action: Reset to Server Environment Defaults
   if (action === "reset") {
     clearCache();
+    resetCapabilityCache();
     const cookieStore = cookies();
     cookieStore.delete("zpulse_node_config");
 

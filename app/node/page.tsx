@@ -318,6 +318,55 @@ export default function NodePage() {
         </div>
       </ZCard>
 
+      {data?.peers?.peers && data.peers.peers.length > 0 && (
+        <>
+          <div style={{ height: 16 }} />
+          <ZCard
+            title={`Connected P2P Peer Mesh (${data.peers.peers.length})`}
+            aside={<ZBadge tone="ok">{data.peers.outbound} outbound · {data.peers.inbound} inbound</ZBadge>}
+            note="Active network connections exchanging blocks and mempool transactions directly over the Zcash P2P wire protocol."
+            span
+          >
+            <div className="z-table-wrap">
+              <table className="z-table">
+                <thead>
+                  <tr>
+                    <th>Peer Address</th>
+                    <th>Direction</th>
+                    <th>User Agent / Subversion</th>
+                    <th className="z-n">Ping</th>
+                    <th className="z-n">Starting Height</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.peers.peers.slice(0, 10).map((peer, idx) => (
+                    <tr key={peer.addr || idx}>
+                      <td style={{ fontFamily: "var(--z-mono)", fontSize: 12 }}>
+                        {peer.addr || "Unknown"}
+                      </td>
+                      <td>
+                        <ZBadge tone={peer.inbound ? undefined : "accent"}>
+                          {peer.inbound ? "Inbound" : "Outbound"}
+                        </ZBadge>
+                      </td>
+                      <td style={{ fontSize: 12, color: "var(--z-text)" }}>
+                        {peer.subver || "—"}
+                      </td>
+                      <td className="z-n">
+                        {typeof peer.pingtime === "number" ? `${(peer.pingtime * 1000).toFixed(0)}ms` : "—"}
+                      </td>
+                      <td className="z-n">
+                        {peer.startingheight ? `#${formatInt(peer.startingheight)}` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </ZCard>
+        </>
+      )}
+
       <div style={{ height: 16 }} />
 
       <div className="z-grid-2">

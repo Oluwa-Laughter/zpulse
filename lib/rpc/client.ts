@@ -243,18 +243,34 @@ export function readRpcConfig(override?: Partial<RpcConfig>): RpcConfig {
     };
   }
 
-  const url = session?.url !== undefined ? session.url : envStr("ZCASH_RPC_URL");
+  const configuredUrl = session?.url !== undefined ? session.url : envStr("ZCASH_RPC_URL");
   const explicitMode = session?.mode || envStr("ZCASH_RPC_MODE").toLowerCase();
 
+  const isCloud = Boolean(
+    process.env.VERCEL ||
+    process.env.NETLIFY ||
+    process.env.RENDER ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME,
+  );
+  const isLocalhost = !configuredUrl || configuredUrl.includes("127.0.0.1") || configuredUrl.includes("localhost");
+
   let mode: RpcMode;
-  if (explicitMode === "demo") mode = "demo";
-  else if (explicitMode === "live") mode = "live";
-  else if (process.env.VERCEL || process.env.NETLIFY || process.env.RENDER || process.env.AWS_LAMBDA_FUNCTION_NAME) {
-    // In cloud deployment without an external URL, default to demo mode rather than failing on localhost
-    const isLocalhost = !url || url.includes("127.0.0.1") || url.includes("localhost");
+  let url = configuredUrl;
+
+  if (explicitMode === "demo") {
+    mode = "demo";
+    url = "";
+  } else if (explicitMode === "live") {
+    mode = "live";
+  } else if (isCloud) {
+    // In cloud deployments without a valid remote URL, default to demo sandbox
+    // rather than failing to reach localhost:8232.
     mode = isLocalhost ? "demo" : "live";
+    if (isLocalhost) url = "";
   } else {
-    mode = url ? "live" : "demo";
+    // Local / CLI environment: Having a URL means live; having none means demo.
+    mode = configuredUrl ? "live" : "demo";
+    url = configuredUrl;
   }
 
   const user = session?.user !== undefined ? session.user : envStr("ZCASH_RPC_USER");
@@ -431,11 +447,19 @@ async function postOnce<T>(
 
     // -32601 is JSON-RPC "method not found" — the signal the dialect layer
     // uses to route around a method this node does not implement.
-    if (code === -32601) throw new RpcUnsupportedError(method);
+    if (
+      code === -32601 ||
+      /method not found|not supported|unknown method|no such method|unimplemented/i.test(message)
+    ) {
+      throw new RpcUnsupportedError(method);
+    }
     throw new RpcMethodError(message, method, code);
   }
 
   if (!response.ok) {
+    if (response.status === 404 || response.status === 405) {
+      throw new RpcUnsupportedError(method);
+    }
     throw new RpcHttpError(`HTTP ${response.status}`, method, response.status);
   }
 

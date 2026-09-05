@@ -104,6 +104,8 @@ export function ZNodeSwitcherModal({
             setActiveTab("remote");
             setRemoteUrl(data.session.url);
             if (data.session.headerName) setHeaderName(data.session.headerName);
+          } else {
+            setActiveTab("demo");
           }
         }
       })
